@@ -15,7 +15,8 @@ def call(a,sig,*args):
         time.sleep(2*(i+1))
     return None
 Z='0x'+'0'*40
-out={}
+BLOCK=int(subprocess.run(['base-cast','block-number','--rpc-url',R],capture_output=True,text=True).stdout)
+out={'_block':BLOCK}
 for s,t in TOK.items():
     best=None
     for fn,f in FACT.items():
