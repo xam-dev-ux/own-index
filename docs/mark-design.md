@@ -25,3 +25,15 @@ Feeds update on a 0.5% deviation or a 24h heartbeat. A flat stock can legitimate
 
 ## Divergence
 Compared only if all hold: secondary configured, market open, both feeds FRESH, both registered for longer than the comparison window, and the two prints are within the comparison window of each other. Otherwise the status says which condition failed. Feeds that print far apart report the lag, not a disagreement.
+
+## AWAITING_FIRST_PRINT is stale and possibly wrong
+After a closure the held print is not only old. News over the weekend (an earnings release, a futures move) can make it wrong, and the first print after the reopen can jump by several percent. A vault must refuse until the first print of the new session. There is no degraded-but-usable reading of this state.
+
+## What the vault consumes
+`markOf` reads live feed state, the registry pause flag and the calendar. It does not read the gap ledger (`gapsOf`, `inClosure`, `closePrint*`); `test_markOf_independent_of_ledger_state` enforces this. The snapshot cron produces evidence, not safety. A missed reopen costs a gap record, never a wrong verdict.
+
+## Ledger fidelity
+The feed exposes only its latest round. The recorded reopen print is the latest at observation time, so the quality of a `GapRecord` depends on how soon after the reopen `snapshot` is called. `observedAtMs` has 200 ms resolution and describes the observation, not the feed print, which has one-second resolution.
+
+## Open test debt
+`printLagSecs` and `PRINTS_TOO_FAR_APART` are tested only with mocks. Before `PRINTS_TOO_FAR_APART` is used as evidence, add a fixture test from the real sequence (AAPL print 19:58 UTC, NVDA print 21:39 UTC on 2026-11-06) and the Monday prints from `data/feed_samples*.csv`.

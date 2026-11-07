@@ -378,4 +378,19 @@ contract SessionOracleTest is Test {
     function test_openSeconds_exact_week() public view {
         assertEq(o.openSecondsBetween(MON, MON + 7 days), uint256(CLOSE_OFF - OPEN_OFF));
     }
+
+    /// @dev The verdict the vault consumes depends only on live feed state, never on the ledger or on
+    /// whether anyone called snapshot().
+    function test_markOf_independent_of_ledger_state() public {
+        _print(100e8, 4 days + 22 hours);
+        _at(5 days + 12 hours);
+        ISessionOracle.Mark memory before_ = _m();
+        o.snapshot(address(tok));
+        assertEq(abi.encode(before_), abi.encode(_m()));
+        _at(7 days + 1 hours + 30 minutes);
+        _print(90e8, 7 days + 1 hours + 10 minutes);
+        ISessionOracle.Mark memory unrecorded = _m();
+        o.snapshot(address(tok));
+        assertEq(abi.encode(unrecorded), abi.encode(_m()));
+    }
 }
