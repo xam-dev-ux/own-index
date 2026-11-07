@@ -13,7 +13,7 @@ ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork deploy-oracle-sepolia deploy-oracle-mainnet
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-oracle-sepolia deploy-oracle-mainnet
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -28,6 +28,14 @@ test: check-suites
 
 test-fork: check-suites
 	$(FORGE) test --fork-url $(MAINNET_RPC) --fork-block-number $(FORK_BLOCK) --match-contract "^($(shell echo $(FORK_SUITES) | tr ' ' '|'))$$"
+
+# Simulation only: nothing is broadcast and no keystore is needed.
+rehearse-dry:
+	$(FORGE) script script/RehearseSepolia.s.sol --fork-url $(SEPOLIA_RPC)
+
+# Sepolia only, disposable parameters. Prompts for the keystore password.
+rehearse-sepolia: check-keystore
+	$(FORGE) script script/RehearseSepolia.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast
 
 deploy-oracle-sepolia: check-keystore
 	$(FORGE) script script/DeploySessionOracle.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast

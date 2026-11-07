@@ -393,4 +393,22 @@ contract SessionOracleTest is Test {
         o.snapshot(address(tok));
         assertEq(abi.encode(unrecorded), abi.encode(_m()));
     }
+
+    /// @dev Recalibrating a threshold after deployment leaves accumulated evidence untouched.
+    function test_setThreshold_keeps_ledger_and_registration() public {
+        _closeThenReopen(100e8, 98e8);
+        (,,, uint64 reg0,,) = o.configOf(address(tok));
+        vm.prank(RECORDER);
+        o.setThreshold(address(tok), 9 hours);
+        (,, uint32 th, uint64 reg1,,) = o.configOf(address(tok));
+        assertEq(uint256(th), 9 hours);
+        assertEq(uint256(reg1), uint256(reg0));
+        assertEq(o.gapCount(address(tok)), 1);
+        vm.prank(RECORDER);
+        vm.expectRevert(abi.encodeWithSelector(SessionOracle.UnknownToken.selector, address(0xdead)));
+        o.setThreshold(address(0xdead), 1);
+        vm.prank(address(0xBAD));
+        vm.expectRevert(SessionOracle.NotRecorder.selector);
+        o.setThreshold(address(tok), 1);
+    }
 }

@@ -79,6 +79,7 @@ contract SessionOracle is ISessionOracle {
     );
     event ClosureDetected(address indexed token, uint64 closePrintAt, int256 lastPrice);
     event TokenConfigured(address indexed token, address feed, address secondaryFeed, uint32 thresholdSecs);
+    event ThresholdSet(address indexed token, uint32 thresholdSecs);
     event ClosureAdded(uint64 start, uint64 end, ClosureKind kind);
     event CalendarConfirmed(uint64 until);
     event WindowSet(uint32 openOffset, uint32 closeOffset);
@@ -257,6 +258,16 @@ contract SessionOracle is ISessionOracle {
         }
         c.secondaryFeed = secondaryFeed;
         emit TokenConfigured(token, feed, secondaryFeed, thresholdSecs);
+    }
+
+    /// @notice Change a token's in-session threshold after deployment. Touches nothing but the threshold:
+    /// the gap ledger and the token's registration times are left as they are, so recalibrating never
+    /// rewrites accumulated evidence.
+    function setThreshold(address token, uint32 thresholdSecs) external onlyRecorder {
+        if (!configOf[token].active) revert UnknownToken(token);
+        if (thresholdSecs == 0) revert BadParams();
+        configOf[token].inSessionThresholdSecs = thresholdSecs;
+        emit ThresholdSet(token, thresholdSecs);
     }
 
     function setWindow(uint32 openOffset_, uint32 closeOffset_) external onlyRecorder {
