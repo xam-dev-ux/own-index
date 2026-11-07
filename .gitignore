@@ -1,0 +1,7 @@
+.env
+.env.*
+!.env.example
+out/
+cache/
+node_modules/
+data/feed_samples*.csv
