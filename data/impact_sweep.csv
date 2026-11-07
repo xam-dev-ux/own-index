@@ -1,0 +1,14 @@
+# Real pool.swap (USDC in) on a Base mainnet fork at block 54457318. Columns: token, then price impact vs spot, fee excluded, in units of 1e-5 (1 = 0.1 bps),
+# at sizes (USDC): 500,1000,2000,3000,5000,7500,10000,15000,20000,30000,50000. Source: docs/fork-check/ImpactSweep.t.sol. Buy direction only.
+AAPL,1,1,1,1,2,2,3,4,6,8,13
+AMZN,1,1,1,1,1,2,2,3,4,6,10
+GOOGL,1,1,1,2,3,4,5,7,9,13,25
+META,1,1,1,1,2,2,3,4,5,7,12
+MSFT,1,1,2,3,5,7,9,13,16,21,28
+MSTR,1,1,1,2,3,4,5,7,9,21,56
+NVDA,1,1,1,1,2,3,4,5,7,10,16
+SNDK,1,1,1,2,2,3,4,6,7,11,17
+SPCX,1,1,1,1,2,3,4,5,7,10,17
+TSLA,1,1,2,3,4,6,7,11,14,21,40
+INTC,76,145,234,313,463,626,731,872,979,1158,1475
+CRCL,26,52,105,162,280,404,482,589,672,814,1067

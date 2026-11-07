@@ -33,7 +33,9 @@ interface IIndexVault {
         CORPORATE_ACTION_PAUSE,    // Mark.session == PAUSED
         MULTIPLIER_CHANGE_IMMINENT,// token.effectiveAt() inside the window
         NO_DRIFT,
-        TOO_SOON
+        TOO_SOON,
+        SLIPPAGE_EXCEEDED,         // post-trade: executed value fell outside maxSlippageBps. Recorded by tryRebalance only.
+        IMPACT_CAP_EXCEEDED        // post-trade: a component moved by more than its immutable cap. Recorded by tryRebalance only.
     }
 
     struct Refusal {
@@ -52,8 +54,18 @@ interface IIndexVault {
     error MultiplierChangeImminent(address token, uint256 effectiveAt);
     error NoDriftDetected();
     error RebalanceTooSoon(uint64 nextEligibleAt);
-    error SlippageExceeded(address token, uint256 expectedMin, uint256 actual);
+    /// @dev Aggregate over the whole batch: `traded` is the value bought (oracle prices), `loss` the value lost.
+    error SlippageExceeded(uint256 traded, uint256 loss, uint256 maxLossAllowed);
+    error ImpactCapExceeded(address token, uint256 movedValue, uint256 cap);
     error SlippageCapExceeded(uint16 requested); // rules.maxSlippageBps > 500
+    error InvalidRules();
+    error BadComponents();
+    error TokenNotAllowed(address token);
+    error SwapFailed(uint256 index);
+    error NotSelf();
+    error Reentrancy();
+    error AlreadyInitialized();
+    error LengthMismatch();
 
     // ------------------------------------------------------------ events
     event Deposited(address indexed asset, uint256 amount);
@@ -65,6 +77,8 @@ interface IIndexVault {
     );
     event RulesUpdated();
     event ComponentsUpdated();
+
+    event OwnerSet(address indexed owner);
 
     // ------------------------------------------------------------ owner actions
     /// @notice Atomic. If any component refuses, the whole call reverts with that component's error.

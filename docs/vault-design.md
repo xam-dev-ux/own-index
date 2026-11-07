@@ -29,12 +29,40 @@ The original spec has `rebalance()` revert with `FeedNotFresh` and also record `
 - Replaced the string `reason` in `rebalanceStatus` with a structured `Refusal[]`.
 - `deposit(usdc, swapCalldata)` is gated like a rebalance because it trades. `depositInKind` is not.
 
-## Open decision: `maxImpactBps`
-The vault cannot measure pool impact itself without reading the pool. The slippage check against the oracle price already bounds the executed price, impact included, within `maxSlippageBps` (hard cap 500). For thin pools (INTC, CRCL) a size cap per swap is a property of the pool. Options:
-1. Drop `maxImpactBps`; rely on the oracle-referenced slippage bound.
-2. A per-token swap-size cap held by the factory, immutable per deployment, derived from docs/liquidity-evidence.md. A new factory is needed to change it.
-3. A per-token cap held by an operator-owned registry. Rejected unless needed: it gives the deployer a parameter that changes vault behaviour.
-The fork check showed the single-range estimate understates impact at $1,000 and overstates it at $10,000, so any cap derived from it should be set knowing that.
+## Decision: per-token swap cap, immutable per factory (`maxImpactBps` is replaced by it)
+Chosen: option 2. A per-token cap on the value one component may move in a single operation, held by the factory, fixed in its constructor, with no setter and no owner. Options 1 (oracle-referenced slippage only) and 3 (deployer-owned registry) were rejected: slippage bounds the price but not the size, and the thin pools are the ones that need a size bound; a registry would let the deployer change the behaviour of vaults already deployed.
+
+Calibration versus safety: the oracle threshold is a calibration (statistical, improves with data, `setThreshold`). The cap is a safety property derived from liquidity evidence; it is immutable so a user can verify it and nobody can weaken it afterwards.
+
+**Assumed consequence, not a discovered limitation:** the cap reflects the liquidity at the factory's deployment. If liquidity of a pool changes materially, the remedy is a new factory and new vaults, not an adjustment.
+
+### How the numbers are derived
+Criterion (stated before reading the result): the largest swept size whose *real* swap price impact, fee excluded, is at most 50 bps, which is half the 100 bps eligibility gate. Data: `data/impact_sweep.csv`, produced by `docs/fork-check/ImpactSweep.t.sol`, real `pool.swap` on a fork pinned at block 54457318, sizes $500 to $50,000. The sweep ceiling is $50,000; a token that never reaches 50 bps by then gets the ceiling.
+
+| Token | Real impact at largest size still under the criterion | Cap (USDC) |
+|---|---|---|
+| INTC | 46.3 bps at $5,000 ($7,500 gives 62.6) | 5,000 |
+| CRCL | 48.2 bps at $10,000 ($15,000 gives 58.9) | 10,000 |
+| the other ten | under 6 bps at $50,000 (largest MSTR 5.6) | 50,000 (sweep ceiling, not a measured limit) |
+
+Limits of this evidence: one block, buy direction only (USDC in), not the sell direction; the fork is not the live chain. The cap for the ten deep pools is the edge of what was measured, not a property of the pool. Rounding down to a swept size is deliberate: the figures are measured points, not interpolations.
+
+### What the cap is compared against
+The vault does not parse router calldata. After the router calls it values, at oracle prices, the balance change of each component and requires `moved <= cap` for each. Because that happens after the swaps, a breach reverts the whole batch (rolled back as a unit) and `tryRebalance` records it as `IMPACT_CAP_EXCEEDED`.
+
+## Shared evaluation: the entry points cannot diverge
+All pre-trade checks live in one internal `_evaluate(action)` returning the set of refusals. `rebalance` reverts with the first, `tryRebalance` records all of them, `rebalanceStatus` returns them. Post-trade checks (cap, slippage) live in one external-self-call `executeTrade`, used by `rebalance`, `tryRebalance` and `deposit`. `testFuzz_entry_points_agree` checks that for every session/cause combination `rebalance` reverts exactly when `tryRebalance` returns false and `rebalanceStatus` says not possible.
+
+## Trading model and its caveats
+- The vault calls only the factory's fixed router, with calldata supplied by the owner's client. It trusts none of it: approvals are granted for the batch and reset to zero, and the outcome is checked on balances at oracle prices.
+- Slippage is enforced on the batch, not per swap: value lost must be at most `maxSlippageBps` of value bought. A bad single leg inside a good batch can hide under the batch tolerance.
+- Rebalance drift is measured over component values only. USDC held in the vault is not part of the weights; initial buying uses `deposit(usdc, swaps)`.
+- Withdrawal of everything skips a token whose transfer fails so one bad token cannot block the others; `withdraw(asset, ...)` reaches it individually.
+
+## Unverified assumptions to confirm on a fork
+- The B20 selectors the vault reads: `effectiveAt()` for the multiplier-change window and `uiMultiplier()` for display. Written from the interface notes, not yet executed against the live precompile.
+- The router the factory is deployed with, and its calldata, are not chosen yet. Tests use a mock router.
+- `multiplierWindowSecs` is a constructor value, not yet chosen.
 
 ## Not decided here
-Valuation details, the drift calculation, and the swap-outcome validation arithmetic. They follow once the refusal shape is agreed.
+Router choice and calldata construction (client side), `multiplierWindowSecs`, and the sell-direction impact sweep.
