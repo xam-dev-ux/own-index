@@ -21,8 +21,9 @@ interface ISessionOracle {
         WEEKEND,              // CLOSED
         HOLIDAY,              // CLOSED, full-day closure from the calendar
         EARLY_CLOSE,          // CLOSED, after the shortened close of a half day
-        OUTSIDE_FEED_HOURS,   // CLOSED, between daily feed sessions
-        FEED_NOT_UPDATING,    // STALE_IN_SESSION
+        AWAITING_FIRST_PRINT, // STALE_IN_SESSION: market reopened, held print predates it, still inside the token threshold. Expected, not a fault.
+        FEED_NOT_UPDATING,    // STALE_IN_SESSION: silent longer than the token's threshold (statistical signal)
+        HEARTBEAT_EXCEEDED,   // STALE_IN_SESSION: silent longer than heartbeat + margin of open time (hard signal)
         REGISTRY_PAUSED,      // PAUSED
         FEED_INVALID,         // UNKNOWN: answer <= 0, updatedAt == 0, incomplete round, or the call reverted
         CALENDAR_NOT_LOADED,  // UNKNOWN: the date is beyond the confirmed calendar horizon
