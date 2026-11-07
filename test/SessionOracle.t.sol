@@ -411,4 +411,18 @@ contract SessionOracleTest is Test {
         vm.expectRevert(SessionOracle.NotRecorder.selector);
         o.setThreshold(address(tok), 1);
     }
+
+    /// @dev ERC-8021 appends a suffix to calldata. Calls must behave identically with it.
+    function test_calldata_suffix_is_ignored() public {
+        bytes memory suffix = hex"07626173656170700080218021802180218021802180218021";
+        _print(100e8, 4 days + 22 hours);
+        _at(5 days + 12 hours);
+        (bool ok,) = address(o).call(bytes.concat(abi.encodeCall(o.snapshot, (address(tok))), suffix));
+        assertTrue(ok);
+        assertTrue(o.inClosure(address(tok)));
+        (bool ok2, bytes memory ret) =
+            address(o).staticcall(bytes.concat(abi.encodeCall(o.markOf, (address(tok))), suffix));
+        assertTrue(ok2);
+        assertEq(abi.encode(abi.decode(ret, (ISessionOracle.Mark))), abi.encode(_m()));
+    }
 }
