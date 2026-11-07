@@ -18,3 +18,17 @@ Not covered here: DivergenceStatus COMPARED (it needs both feeds registered for 
 
 ## Known gap: one debt, not two
 `DivergenceStatus.COMPARED` and `PRINTS_TOO_FAR_APART` are not exercised with real data. Both are settled by the same fixture: the real print sequence (AAPL 19:58 UTC and NVDA 21:39 UTC on 2026-11-06, plus the Monday prints from the poller CSVs). A second Sepolia run built from mocks would prove nothing the unit tests do not already prove. Until that fixture exists, neither status is eligibility evidence.
+
+## Result: 2026-11-07, Base Sepolia (chain 84532), blocks 55808109 to 55808124
+Broadcast with `--account speedrun`; all transactions succeeded; total paid 0.000073 ETH.
+
+| Contract | Address |
+|---|---|
+| openOracle (SessionOracle, 8 tokens) | 0x1F738c57907505650659dF4D9891868bf6eb325e |
+| closedOracle (SessionOracle, 1 token) | 0x5322b30b2841aC123D935775bE225fF7570c5c0a |
+
+`scripts/check_rehearsal.py` read the nine verdicts from the deployed contracts: FRESH, AWAITING_FIRST_PRINT, FEED_NOT_UPDATING, HEARTBEAT_EXCEEDED, FEED_INVALID (future-dated), FEED_INVALID (price above 1e20), PAUSED, FEED_INVALID (reverting feed), CLOSED. Output: ALL MATCH, so the simulation and the chain agree.
+
+These addresses equal those of the earlier local-fork run because a contract address depends only on the deployer and its nonce; they were not reused from that run.
+
+Parameters in these deployments are disposable. Do not carry any of them to mainnet.
