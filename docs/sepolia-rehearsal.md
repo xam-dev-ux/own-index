@@ -14,4 +14,7 @@ Not covered here: DivergenceStatus COMPARED (it needs both feeds registered for 
 ## Steps
 1. `make rehearse-dry` simulates against a Sepolia fork. No broadcast, no password.
 2. `make rehearse-sepolia` broadcasts. It prompts for the keystore password. Estimated cost 0.00018 ETH.
-3. The verdict checks inside the script run against the simulated state. After broadcasting, read the deployed oracles directly on chain to confirm, for example `base-cast call <oracle> "markOf(address)" <mock token> --rpc-url https://sepolia.base.org`, for each mock token printed in the broadcast file.
+3. The rehearsal is not done at broadcast. The verdict checks inside the script run against simulated state. Run `python3 -I scripts/check_rehearsal.py broadcast/RehearseSepolia.s.sol/84532/run-latest.json` to read the nine verdicts from the deployed contracts on Sepolia. It prints ALL MATCH or DIVERGENCE. Only ALL MATCH completes the rehearsal. The checker itself was exercised end to end on a local fork of Sepolia with real broadcast transactions (not on Sepolia).
+
+## Known gap: one debt, not two
+`DivergenceStatus.COMPARED` and `PRINTS_TOO_FAR_APART` are not exercised with real data. Both are settled by the same fixture: the real print sequence (AAPL 19:58 UTC and NVDA 21:39 UTC on 2026-11-06, plus the Monday prints from the poller CSVs). A second Sepolia run built from mocks would prove nothing the unit tests do not already prove. Until that fixture exists, neither status is eligibility evidence.
