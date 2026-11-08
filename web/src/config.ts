@@ -2,7 +2,7 @@ import { createConfig, http } from "wagmi";
 import { defineChain } from "viem";
 
 export interface Addresses {
-  chainId: number; rpc: string; owner: `0x${string}`;
+  chainId: number; rpc: string; forkBlock: number; owner: `0x${string}`;
   oracle: `0x${string}`; adapter: `0x${string}`; factory: `0x${string}`; vault: `0x${string}`; usdc: `0x${string}`;
 }
 

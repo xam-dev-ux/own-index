@@ -5,6 +5,7 @@ import { formatUnits } from "viem";
 import { loadAddresses, makeConfig, type Addresses } from "./config";
 import { oracleAbi, DIVERGENCE } from "./abi";
 import { TOKENS } from "./tokens";
+import { Vault } from "./Vault";
 import { verdictOf, type Tone } from "./verdict";
 
 const qc = new QueryClient();
@@ -20,7 +21,7 @@ export function App() {
       <main>
         {err && <p className="banner fault">{err}</p>}
         {addr && config && (
-          <WagmiProvider config={config}><QueryClientProvider client={qc}><Marks addr={addr} /></QueryClientProvider></WagmiProvider>
+          <WagmiProvider config={config}><QueryClientProvider client={qc}><Marks addr={addr} /><Vault addr={addr} /></QueryClientProvider></WagmiProvider>
         )}
       </main>
       <Footer />

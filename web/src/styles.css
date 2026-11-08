@@ -8,3 +8,4 @@ table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1p
 .why{color:var(--mut);font-size:12.5px;margin-top:3px;max-width:44ch}.legend{margin:8px 0 14px}.note,footer{color:var(--mut);font-size:12.5px}.banner{padding:10px 12px;border-radius:8px}
 footer{margin-top:32px;border-top:1px solid var(--line);padding-top:12px}
 @media (max-width:640px){th:nth-child(5),td:nth-child(5),.why{display:none}}
+h3{margin:22px 0 6px;font-size:16px}.refusals{list-style:none;padding:0;margin:0}.refusals li{padding:5px 0}code{font-size:12px}

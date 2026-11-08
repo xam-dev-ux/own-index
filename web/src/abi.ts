@@ -28,3 +28,34 @@ export const oracleAbi = [
     outputs: [{ name: "", type: "tuple[]", components: markComponents }],
   },
 ] as const;
+
+// Mirrors src/IIndexVault.sol (RefusalKind order is the on-chain order).
+export const REFUSAL = [
+  "NONE", "MARKET_CLOSED", "AWAITING_FIRST_PRINT", "FEED_FAULT", "CORPORATE_ACTION_PAUSE", "MULTIPLIER_CHANGE_IMMINENT",
+  "NO_DRIFT", "TOO_SOON", "SLIPPAGE_EXCEEDED", "IMPACT_CAP_EXCEEDED", "MULTIPLIER_CHANGED",
+] as const;
+
+export const vaultAbi = [
+  { type: "function", name: "components", stateMutability: "view", inputs: [],
+    outputs: [{ type: "tuple[]", components: [{ name: "token", type: "address" }, { name: "targetWeightBps", type: "uint16" }] }] },
+  { type: "function", name: "currentWeights", stateMutability: "view", inputs: [], outputs: [{ type: "uint16[]" }] },
+  { type: "function", name: "totalValue", stateMutability: "view", inputs: [], outputs: [{ name: "value", type: "uint256" }, { name: "allFresh", type: "bool" }] },
+  { type: "function", name: "rules", stateMutability: "view", inputs: [],
+    outputs: [{ name: "driftThresholdBps", type: "uint16" }, { name: "minRebalanceInterval", type: "uint32" }, { name: "maxSlippageBps", type: "uint16" }] },
+  { type: "function", name: "refusalCount", stateMutability: "view", inputs: [], outputs: [{ type: "uint256" }] },
+  { type: "function", name: "rebalanceStatus", stateMutability: "view", inputs: [],
+    outputs: [
+      { name: "possible", type: "bool" },
+      { name: "refusals", type: "tuple[]", components: [{ name: "kind", type: "uint8" }, { name: "token", type: "address" }, { name: "cause", type: "uint8" }] },
+      { name: "nextEligibleAt", type: "uint64" }, { name: "maxDriftBps", type: "uint16" },
+    ] },
+] as const;
+
+export const refusedEvent = {
+  type: "event", name: "RebalanceRefused",
+  inputs: [
+    { name: "refusalId", type: "uint256", indexed: true }, { name: "kind", type: "uint8", indexed: false },
+    { name: "token", type: "address", indexed: true }, { name: "cause", type: "uint8", indexed: false },
+    { name: "timestampMs", type: "uint64", indexed: false },
+  ],
+} as const;
