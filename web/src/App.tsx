@@ -1,11 +1,13 @@
 import { useEffect, useMemo, useState } from "react";
-import { WagmiProvider, useReadContract } from "wagmi";
+import { WagmiProvider, useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { formatUnits } from "viem";
-import { loadAddresses, makeConfig, type Addresses } from "./config";
-import { oracleAbi, DIVERGENCE } from "./abi";
+import { loadAddresses, makeConfig, isFork, type Addresses } from "./config";
+import { oracleAbi, vaultAbi, DIVERGENCE } from "./abi";
+import { erc20Abi, factoryAbi } from "./abiWrite";
 import { TOKENS } from "./tokens";
 import { Vault } from "./Vault";
+import { Actions, CreateVault, Setup } from "./Actions";
 import { verdictOf, type Tone } from "./verdict";
 
 const qc = new QueryClient();
@@ -21,12 +23,42 @@ export function App() {
       <main>
         {err && <p className="banner fault">{err}</p>}
         {addr && config && (
-          <WagmiProvider config={config}><QueryClientProvider client={qc}><Marks addr={addr} /><Vault addr={addr} /></QueryClientProvider></WagmiProvider>
+          <WagmiProvider config={config}><QueryClientProvider client={qc}><Wallet addr={addr} /><Marks addr={addr} /><Mine addr={addr} /></QueryClientProvider></WagmiProvider>
         )}
       </main>
       <Footer />
     </div>
   );
+}
+
+function Wallet({ addr }: { addr: Addresses }) {
+  const { address, isConnected } = useAccount();
+  const { connect, connectors, isPending } = useConnect();
+  const { disconnect } = useDisconnect();
+  const usdc = useReadContract({ address: addr.usdc, abi: erc20Abi, functionName: "balanceOf", args: [address!], query: { enabled: !!address, refetchInterval: 5000 } }).data;
+  return (
+    <p className="walletbar">
+      {isConnected ? (
+        <>Connected {address!.slice(0, 6)}…{address!.slice(-4)} · {usdc !== undefined ? `$${Number(formatUnits(usdc, 6)).toLocaleString()} USDC` : ""}{isFork(addr) ? " · local fork (dev account)" : ""} <button onClick={() => disconnect()}>Disconnect</button></>
+      ) : (
+        <button disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>{isFork(addr) ? "Connect dev account (local fork)" : "Connect wallet"}</button>
+      )}
+    </p>
+  );
+}
+
+/** The connected wallet's vault: create one, choose components, then deposit / rebalance / withdraw. */
+function Mine({ addr }: { addr: Addresses }) {
+  const { address } = useAccount();
+  const vaults = useReadContract({ address: addr.factory, abi: factoryAbi, functionName: "vaultsOf", args: [address!], query: { enabled: !!address, refetchInterval: 5000 } }).data;
+  const vault = vaults && vaults.length > 0 ? vaults[vaults.length - 1] : undefined;
+  const comps = useReadContract({ address: vault, abi: vaultAbi, functionName: "components", query: { enabled: !!vault, refetchInterval: 5000 } }).data;
+  if (!address) return <p className="note">Connect a wallet to create or view your vault.</p>;
+  if (!vaults) return <p>Looking for your vaults…</p>;
+  if (!vault) return <CreateVault addr={addr} />;
+  if (!comps) return <p>Reading the vault…</p>;
+  if (comps.length === 0) return <Setup addr={addr} vault={vault} />;
+  return <><Vault addr={addr} vault={vault} /><Actions addr={addr} vault={vault} /></>;
 }
 
 function Marks({ addr }: { addr: Addresses }) {

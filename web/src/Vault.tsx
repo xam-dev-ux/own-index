@@ -15,8 +15,8 @@ function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) {
   return <span className={`pill ${tone}`}>{children}</span>;
 }
 
-export function Vault({ addr }: { addr: Addresses }) {
-  const v = { address: addr.vault, abi: vaultAbi } as const;
+export function Vault({ addr, vault }: { addr: Addresses; vault: `0x${string}` }) {
+  const v = { address: vault, abi: vaultAbi } as const;
   const { data } = useReadContracts({
     contracts: [
       { ...v, functionName: "components" },
@@ -67,25 +67,25 @@ export function Vault({ addr }: { addr: Addresses }) {
         </ul>
       )}
       <p className="note">Rules: rebalance when a weight drifts {pct(driftBps)}; at least {minInt}s between rebalances; max slippage {pct(slipBps)} against oracle prices.</p>
-      <RefusalLog addr={addr} count={count} />
+      <RefusalLog addr={addr} vault={vault} count={count} />
     </section>
   );
 }
 
 interface Row { id: bigint; kind: number; token: `0x${string}`; cause: number; ms: bigint; block: bigint }
 
-function RefusalLog({ addr, count }: { addr: Addresses; count: number }) {
+function RefusalLog({ addr, vault, count }: { addr: Addresses; vault: `0x${string}`; count: number }) {
   const client = usePublicClient();
   const [rows, setRows] = useState<Row[] | null>(null);
   useEffect(() => {
     if (!client) return;
     client
-      .getLogs({ address: addr.vault, event: refusedEvent, fromBlock: BigInt(addr.forkBlock) + 1n })
+      .getLogs({ address: vault, event: refusedEvent, fromBlock: BigInt(addr.forkBlock) + 1n })
       .then((logs) =>
         setRows(logs.map((l) => ({ id: l.args.refusalId!, kind: l.args.kind!, token: l.args.token!, cause: l.args.cause!, ms: l.args.timestampMs!, block: l.blockNumber })).reverse()),
       )
       .catch(() => setRows([]));
-  }, [client, addr, count]);
+  }, [client, addr, vault, count]);
   return (
     <>
       <h3>Recorded refusals <span className="why">({count} on chain)</span></h3>

@@ -9,3 +9,4 @@ table{width:100%;border-collapse:collapse}th,td{padding:8px 6px;border-bottom:1p
 footer{margin-top:32px;border-top:1px solid var(--line);padding-top:12px}
 @media (max-width:640px){th:nth-child(5),td:nth-child(5),.why{display:none}}
 h3{margin:22px 0 6px;font-size:16px}.refusals{list-style:none;padding:0;margin:0}.refusals li{padding:5px 0}code{font-size:12px}
+button{font:inherit;padding:6px 14px;border-radius:8px;border:1px solid var(--line);background:var(--closedbg);color:var(--fg);cursor:pointer}button:disabled{opacity:.5;cursor:default}input{font:inherit;padding:5px 8px;border-radius:6px;border:1px solid var(--line);background:var(--bg);color:var(--fg);width:130px}input.sm{width:64px}.walletbar{text-align:right;margin:0 0 8px}section{margin-top:28px}.banner.fresh{background:var(--freshbg);color:var(--fresh)}.banner.expected{background:var(--expbg);color:var(--exp)}
