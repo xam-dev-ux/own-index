@@ -1,0 +1,64 @@
+# Build log
+
+Two contracts for the Programmable Stock Markets track: **WeekendMark**, a price oracle that knows whether a market is open and keeps a public ledger of what weekends do to prices, and **Own Index**, self-custodial index vaults that refuse to trade against a price that is not fresh.
+
+This is not a list of commits. It is what I found while building, and what I changed because of it. Where I was wrong, I say so.
+
+## What the design reacted to
+
+### 1. A single staleness threshold lies on weekends
+My first idea was one number: a price older than N hours is stale. I measured it on 2026-11-07. A flat 26-hour threshold labels Friday's last print FRESH for the whole of Saturday, because it is less than 26 hours old. The market is closed and the price is a day old in every way that matters.
+
+So freshness became two questions. *Is the market supposed to be open?* is answered by a calendar (weekly window plus declared holidays and early closes). *Is the feed delivering while it should?* is answered by a per-token silence threshold counted only in open time. The oracle now answers with a verdict (fresh, closed, stale in session, paused, unknown) and a cause, so a closed market and a broken feed are never the same answer.
+
+### 2. These feeds print on movement, not on a clock
+The feeds update on a 0.5% deviation or a 24-hour heartbeat. A flat stock can go hours without a print inside a session: AAPL printed at 19:58 UTC on 2026-11-06 and then nothing. A short global threshold would call that a fault. The threshold is therefore per token, and it is set from the measured distribution of gaps between prints, not guessed. That measurement runs on two pollers until 2026-11-09 16:00 UTC, which is why the mainnet parameters are still pending.
+
+### 3. The first print after a reopen can be wrong
+After a weekend the held price is not just old. News over the weekend can make it wrong, and the first print after the open can jump by several percent. I added a state for it, `AWAITING_FIRST_PRINT`, and made it a refusal with no degraded mode. It is shown as expected rather than as a fault, because right after a reopen it is exactly that.
+
+### 4. A reverted call leaves no log
+The original idea was that a refused rebalance both reverts and records `RebalanceRefused` on chain. A revert discards its own logs, so it cannot do both. There are two entry points. `rebalance` reverts with the specific error, which is right for simulation and wallets. `tryRebalance` runs the same checks, and on refusal records the reason and returns false. Both are fed by one internal evaluation, and a fuzz test checks that for every verdict they agree: `rebalance` reverts exactly when `tryRebalance` returns false.
+
+### 5. My liquidity estimate was wrong, in two directions
+I first estimated price impact from `slot0()` and `liquidity()` alone. Checked against real `pool.swap` calls on a fork, the estimate understated INTC at $1,000 (11.1 bps predicted, 14.5 real) and overstated it at $10,000 (109.7 predicted, 73.1 real). I had written that the method was optimistic at $10,000. That was wrong for these pools, and I corrected the note. Caps are now derived from real swaps, with the criterion fixed before looking at the data: the largest swept size with at most 50 bps of impact.
+
+### 6. A cap that checks the net movement can be bypassed
+The per-token size cap first compared the net change in a token's balance. A batch that buys and sells the same token in one transaction nets to almost nothing and passes. The check now uses gross movement per leg, summed in value at oracle prices.
+
+### 7. I cannot read what the router will do
+A vault cannot verify arbitrary router calldata. The fix was structural: a small adapter that is the vault's only counterparty, over exactly the twelve pools I measured, with the pool-to-token correspondence checked in its constructor. The cap evidence then describes the pools the vault can actually reach, not just the pools I happened to look at.
+
+### 8. I reasoned the wrong way about an unknown unit
+B20 tokens expose `effectiveAt()` for a scheduled multiplier change. All 298 listed tokens return 0, so there is no live sample and I could not confirm its unit. I wrote that if the unit were milliseconds the vault would just refuse more, which is safe. That was backwards. `effectiveAt` is an instant, so a millisecond value looks like a date thousands of years away, the "imminent" check never fires, and the vault trades through a multiplier change. The failure is unsafe. The guarantee is now a unit-independent value check: if `uiMultiplier()` differs from the last observed value, or changed less than the settle window ago, the vault refuses. A plausibility rule on `effectiveAt` stays as an early warning only. A background watcher alarms the first time any token's `effectiveAt` becomes nonzero, so the unit can finally be read from a live sample.
+
+### 9. The deploy script's own check proved nothing
+At the end of a deployment script, reading state reads the simulation, not the chain. I learned this on a Sepolia rehearsal, where the simulation and the chain could have disagreed. Verification is a separate script that reads the deployed contracts from the chain. The rehearsal checked nine verdicts against the chain and they all matched. The mainnet deploy script refuses to run while any parameter is missing or still marked pending, and refuses to deploy without the Thanksgiving closures.
+
+### 10. Thanksgiving, and a closure that cannot be undone
+Closures are append-only. The oracle has no function to remove or shorten one. I had said a wide closure could be narrowed later; it cannot. And a half day left undeclared is not safely refused: a print from the early close still counts as fresh until the token's silence threshold runs out. So the closures are declared wide, the whole of 26 and 27 November, and that decision is final at deploy. The cost is availability on two days, never safety.
+
+### 11. The Saturday block flattered the pools
+My caps came from a sweep at a Saturday block. I re-ran it at two Friday session blocks and the picture changed. MSFT, NVDA, SNDK, SPCX and TSLA could move price by more than the 50 bps the cap was meant to bound. INTC cost 94 to 105 bps at $500, and CRCL's pool held in-range liquidity of 571,692 units, so 800 USDC bought 0.0066 CRCL, about 45 cents. At a third block, an hour before the window closed, both were usable again. So what the data shows is that pool depth varies a lot between blocks and that one block of any day is not a distribution. I did not find the cause. The cap table is being rebuilt as the minimum over several session blocks, and INTC and CRCL leave the index if they stay unusable. That is decided after the Monday measurement.
+
+### 12. The interface showed me bugs the contract tests could not
+Driving the interface against a mainnet fork found two. A deposit whose simulation passed ran out of gas when sent, because the gas estimate is too tight for eleven nested swaps; sends now carry 30% headroom. And the rebalance panel proposed nine trades of $1 to $19 when no weight had drifted past the threshold, which invites an action the vault would refuse. It now proposes trades only past the threshold.
+
+## Limits I know about
+- **Caps are an upper bound for a pool state, not a promise.** Depth moved between blocks. The sweep is a single block per sample, buy direction only, and ignores the dynamic fee and the MEV-tax module on these pools.
+- **The unit of `effectiveAt` is assumed, not observed.** Seconds is what the documentation says. It is mitigated by the value check but not verified live.
+- **The size cap is only as good as its sample.** Several tokens sit at the sweep ceiling of $50,000, which is where measurement stopped, not a limit I measured.
+- **The weekend gap ledger needs a real weekend.** A fork produces no new prints, so the ledger is empty until mainnet has a reopen.
+- **Two divergence states have only been tested with mocks.** `COMPARED` and `PRINTS_TOO_FAR_APART` wait on a fixture from real prints.
+- **Slippage is checked on the whole batch, not per swap.** A bad single leg inside a good batch can hide under the batch tolerance.
+- **The Base block gas limit was not checked.** A 12-leg batch measured 6.16 million gas on the fork, and I make no claim about headroom.
+- **The contracts are not audited.**
+
+## What the fork now proves
+A local fork of Base is pinned at a session block, with the whole system deployed. The real oracle classifies every state on screen, not just text I wrote: fresh, closed on a weekend, paused (through a mock registry that replaces the real one on the fork), feed not updating after three hours, and awaiting first print after a Monday reopen. A deposit, a refused rebalance recorded on chain, and a withdrawal with the market closed all run through the interface.
+
+## Still to do
+- Mainnet parameters from the pollers, which finish 2026-11-09 16:00 UTC: window offsets, per-token silence thresholds, comparison window, settle window.
+- The in-session impact sweep, new caps, and the decision on the twelve-to-ten token cut.
+- The real-print fixture for the divergence states.
+- Deploy, on-chain verification, and the first week of public data.
