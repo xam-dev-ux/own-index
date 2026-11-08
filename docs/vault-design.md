@@ -76,6 +76,12 @@ Two defences, neither of which relies on the unit being right:
 1. Plausibility: any nonzero `effectiveAt` outside 1.6e9..1e11 is treated as an imminent change and the vault refuses (`test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading`). Covers milliseconds and block numbers. A block number would only enter the plausible range after about 1.6 billion blocks.
 2. Value check, independent of `effectiveAt` entirely: the vault keeps the last observed `uiMultiplier()` per token. If the current value differs, or it changed less than `multiplierWindowSecs` ago, it refuses with `MULTIPLIER_CHANGED` (`test_multiplier_value_change_refuses_without_effectiveAt`, which never sets `effectiveAt`). `tryRebalance` and the permissionless `observeMultipliers()` persist the observation and start the settle window; `rebalance` refuses on any unacknowledged difference, so the two entry points agree (the fuzz covers it). This catches a change that already happened and one that was never scheduled. The settle window reuses `multiplierWindowSecs` and is provisional like it.
 
+Hierarchy: the value check is the guarantee, the plausibility rule on `effectiveAt` is the early notice (it refuses before the change, the value check only after). If one had to go, the plausibility rule goes, never the value check. The value check assumes no unit, but it is not unconditional:
+- It has a baseline: a token first seen after its multiplier already moved is baselined at the moved value.
+- The settle window starts when the change is *observed* (by `tryRebalance` or `observeMultipliers`), not when it happened; a change nobody observed is still refused by the value difference, but the settle time only begins at the first observation.
+- A token whose `uiMultiplier()` cannot be read is not guarded by it.
+- Whether `multiplierWindowSecs` is long enough for the price feed to catch up with a new multiplier is itself an assumption, not measured.
+
 The scheduled-change warning (`effectiveAt`) is therefore only an early notice; safety does not depend on it. The risk is also dormant while no change is scheduled. `scripts/scan_pending_multiplier.sh` exits 1 and prints the raw value the first time any of the 12 tokens has one: that sample closes the unit question. Copy this section to the README.
 
 ## Other unverified assumptions
