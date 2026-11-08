@@ -186,13 +186,14 @@ contract IndexVaultTest is Test {
 
     /// For every verdict a component can have: rebalance reverts <=> tryRebalance returns false,
     /// and rebalanceStatus agrees with both.
-    function testFuzz_entry_points_agree(uint8 sessionRaw, uint8 causeRaw, bool imminent) public {
+    function testFuzz_entry_points_agree(uint8 sessionRaw, uint8 causeRaw, bool imminent, bool multChanged) public {
         _fund();
         _skew();
         ISessionOracle.Session sess = ISessionOracle.Session(bound(sessionRaw, 0, 4));
         ISessionOracle.Cause cause = ISessionOracle.Cause(bound(causeRaw, 0, 10));
         oracle.set(address(b), 50e8, sess, cause);
         if (imminent) a.setEffectiveAt(block.timestamp + 10 minutes);
+        if (multChanged) b.setMultiplier(1.01e18);
         bytes[] memory s = _rebalanceSwaps();
 
         (bool possible, IIndexVault.Refusal[] memory rs,,) = vault.rebalanceStatus();
@@ -293,6 +294,46 @@ contract IndexVaultTest is Test {
         vm.prank(user);
         assertFalse(vault.tryRebalance(s));
         assertEq(vault.refusalCount(), 1);
+    }
+
+    /// The unit-independent net: no effectiveAt is ever set, only the multiplier VALUE changes.
+    function test_multiplier_value_change_refuses_without_effectiveAt() public {
+        _fund();
+        _skew();
+        bytes[] memory s = _rebalanceSwaps();
+        assertEq(a.effectiveAt(), 0);
+        a.setMultiplier(1.0005e18);
+
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(IIndexVault.MultiplierChanged.selector, address(a), 1e18, 1.0005e18));
+        vault.rebalance(s);
+
+        // tryRebalance records it and starts the settle window
+        vm.prank(user);
+        assertFalse(vault.tryRebalance(s));
+        assertEq(vault.refusalCount(), 1);
+        (uint256 seen, uint64 changedAt) = vault.multState(address(a));
+        assertEq(seen, 1.0005e18);
+        assertEq(changedAt, block.timestamp);
+
+        // still refused inside the window, even though the observed value now equals the current one
+        vm.warp(block.timestamp + 30 minutes);
+        (bool possible,,,) = vault.rebalanceStatus();
+        assertFalse(possible);
+
+        vm.warp(block.timestamp + 31 minutes);
+        vm.prank(user);
+        vault.rebalance(s);
+    }
+
+    function test_observeMultipliers_is_permissionless_and_baseline_is_set_at_setComponents() public {
+        (uint256 seen,) = vault.multState(address(a));
+        assertEq(seen, 1e18);
+        b.setMultiplier(2e18);
+        vm.prank(attacker);
+        vault.observeMultipliers();
+        (seen,) = vault.multState(address(b));
+        assertEq(seen, 2e18);
     }
 
     function test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading() public {

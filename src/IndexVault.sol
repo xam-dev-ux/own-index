@@ -34,6 +34,13 @@ contract IndexVault is IIndexVault {
     Component[] private _components;
     Rules public rules;
 
+    /// @dev Unit-independent multiplier guard: the `uiMultiplier()` last observed per token and when it last changed.
+    struct MultState {
+        uint256 seen;
+        uint64 changedAt; // seconds; 0 = never seen to change
+    }
+    mapping(address => MultState) public multState;
+
     uint64 public lastRebalanceAt; // seconds
     uint256 private _refusals;
     uint256 private _rebalances;
@@ -91,6 +98,8 @@ contract IndexVault is IIndexVault {
             (RefusalKind k, ISessionOracle.Cause cause, uint256 price) = _classify(oracle, token);
             if (k == RefusalKind.NONE && _multiplierImminent(token, window)) {
                 k = RefusalKind.MULTIPLIER_CHANGE_IMMINENT;
+            } else if (k == RefusalKind.NONE && _multiplierChanged(token, window)) {
+                k = RefusalKind.MULTIPLIER_CHANGED;
             }
             if (k != RefusalKind.NONE) {
                 marksOk = false;
@@ -155,6 +164,44 @@ contract IndexVault is IIndexVault {
         return at >= block.timestamp && at - block.timestamp <= window;
     }
 
+    function _uiMultiplier(address token) internal view returns (uint256 m) {
+        (bool ok, bytes memory ret) = token.staticcall(abi.encodeWithSignature("uiMultiplier()"));
+        if (ok && ret.length >= 32) m = abi.decode(ret, (uint256));
+    }
+
+    /// @dev Does not use `effectiveAt()` or any time unit from the token. The multiplier VALUE differs from the one
+    /// last observed (a change nobody has acknowledged yet), or it changed less than `window` seconds ago.
+    /// A token whose multiplier cannot be read is not guarded by this check.
+    function _multiplierChanged(address token, uint256 window) internal view returns (bool) {
+        MultState memory ms = multState[token];
+        if (ms.seen == 0) return false;
+        uint256 cur = _uiMultiplier(token);
+        if (cur != 0 && cur != ms.seen) return true;
+        return ms.changedAt != 0 && block.timestamp < uint256(ms.changedAt) + window;
+    }
+
+    /// @dev Persisting path. Called by tryRebalance and observeMultipliers; a reverting path cannot persist it.
+    function _observeMultipliers() internal {
+        for (uint256 i; i < _components.length; ++i) _observe(_components[i].token);
+    }
+
+    function _observe(address token) internal {
+        uint256 cur = _uiMultiplier(token);
+        if (cur == 0) return;
+        MultState storage ms = multState[token];
+        if (ms.seen == 0) {
+            ms.seen = cur; // baseline
+        } else if (cur != ms.seen) {
+            emit MultiplierObserved(token, ms.seen, cur, uint64(BaseTimeLib.timestampMs()));
+            ms.seen = cur;
+            ms.changedAt = uint64(block.timestamp);
+        }
+    }
+
+    function observeMultipliers() external {
+        _observeMultipliers();
+    }
+
     function _effectiveAt(address token) internal view returns (uint256 at) {
         (bool ok, bytes memory ret) = token.staticcall(abi.encodeWithSignature("effectiveAt()"));
         if (ok && ret.length >= 32) at = abi.decode(ret, (uint256));
@@ -186,6 +233,7 @@ contract IndexVault is IIndexVault {
         if (r.kind == RefusalKind.MULTIPLIER_CHANGE_IMMINENT) {
             revert MultiplierChangeImminent(r.token, _effectiveAt(r.token));
         }
+        if (r.kind == RefusalKind.MULTIPLIER_CHANGED) revert MultiplierChanged(r.token, multState[r.token].seen, _uiMultiplier(r.token));
         if (r.kind == RefusalKind.NO_DRIFT) revert NoDriftDetected();
         if (r.kind == RefusalKind.TOO_SOON) revert RebalanceTooSoon(lastRebalanceAt + rules.minRebalanceInterval);
     }
@@ -202,6 +250,7 @@ contract IndexVault is IIndexVault {
 
     /// @inheritdoc IIndexVault
     function tryRebalance(bytes[] calldata swapCalldata) external onlyOwner nonReentrant returns (bool executed) {
+        _observeMultipliers();
         Evaluation memory e = _evaluate(Action.REBALANCE);
         if (e.n > 0) {
             _recordRefusals(e.refusals, e.n);
@@ -379,7 +428,10 @@ contract IndexVault is IIndexVault {
         }
         if (sum != 10_000) revert WeightsMustSumTo10000();
         delete _components;
-        for (uint256 i; i < n; ++i) _components.push(comps[i]);
+        for (uint256 i; i < n; ++i) {
+            _components.push(comps[i]);
+            _observe(comps[i].token);
+        }
         emit ComponentsUpdated();
     }
 

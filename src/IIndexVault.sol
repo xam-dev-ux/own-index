@@ -35,7 +35,8 @@ interface IIndexVault {
         NO_DRIFT,
         TOO_SOON,
         SLIPPAGE_EXCEEDED,         // post-trade: executed value fell outside maxSlippageBps. Recorded by tryRebalance only.
-        IMPACT_CAP_EXCEEDED        // post-trade: a component moved by more than its immutable cap. Recorded by tryRebalance only.
+        IMPACT_CAP_EXCEEDED,       // post-trade: a component moved by more than its immutable cap. Recorded by tryRebalance only.
+        MULTIPLIER_CHANGED         // uiMultiplier differs from the one last observed, or changed less than the settle window ago. Unit-independent.
     }
 
     struct Refusal {
@@ -52,6 +53,7 @@ interface IIndexVault {
     error FeedFault(address token, ISessionOracle.Cause cause);
     error CorporateActionPause(address token);
     error MultiplierChangeImminent(address token, uint256 effectiveAt);
+    error MultiplierChanged(address token, uint256 observed, uint256 current);
     error NoDriftDetected();
     error RebalanceTooSoon(uint64 nextEligibleAt);
     /// @dev Aggregate over the whole batch: `traded` is the value bought (oracle prices), `loss` the value lost.
@@ -79,6 +81,7 @@ interface IIndexVault {
     event ComponentsUpdated();
 
     event OwnerSet(address indexed owner);
+    event MultiplierObserved(address indexed token, uint256 previous, uint256 current, uint64 timestampMs);
 
     // ------------------------------------------------------------ owner actions
     /// @notice Atomic. If any component refuses, the whole call reverts with that component's error.
@@ -98,6 +101,10 @@ interface IIndexVault {
     function withdraw(address asset, uint256 amount, address to) external;
     /// @notice Unconditional escape hatch. No oracle, no router, no freshness, no calendar.
     function withdrawAllInKind(address to) external;
+
+    /// @notice Permissionless. Records a changed `uiMultiplier` of any component and starts its settle window.
+    /// `tryRebalance` does this implicitly; this lets anyone start the window without trading.
+    function observeMultipliers() external;
 
     function setComponents(Component[] calldata components) external;
     function setRules(Rules calldata rules) external;

@@ -27,6 +27,7 @@ contract IndexVaultFactory {
     error ZeroCap(address token);
     error DuplicateToken(address token);
     error ZeroAddress();
+    error ZeroWindow();
 
     constructor(
         ISessionOracle oracle_,
@@ -38,6 +39,8 @@ contract IndexVaultFactory {
     ) {
         if (address(oracle_) == address(0) || usdc_ == address(0) || router_ == address(0)) revert ZeroAddress();
         if (tokens.length != caps.length) revert LengthMismatch();
+        // the same window is the settle time after an observed multiplier change; zero would let the two entry points disagree
+        if (multiplierWindowSecs_ == 0) revert ZeroWindow();
         oracle = oracle_;
         usdc = usdc_;
         router = router_;

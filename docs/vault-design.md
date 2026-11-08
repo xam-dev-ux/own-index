@@ -67,11 +67,16 @@ All pre-trade checks live in one internal `_evaluate(action)` returning the set 
 ## Open assumption: the unit of `effectiveAt()`
 Verified on the live B20s (fork at block 54457318): the functions exist, `uiMultiplier()` is WAD-scaled, `toUIAmount` agrees with `balance * uiMultiplier / 1e18`. **Not verified: the unit of `effectiveAt()`.** All 298 listed tokens return 0 (nothing scheduled), so no live sample exists. It is assumed to be a unix timestamp in seconds, which is what base-stocks documents.
 
-What happens if the assumption is wrong:
-- Milliseconds, or any scale that makes the value look huge: read as seconds the window is far too long, so the vault refuses more than needed. Safe.
-- A block number, or any scale that makes the value look small: read as seconds it would be in the past, so the vault would not see a coming change and could trade through a multiplier change. **This is the only way an unverified assumption here produces an unsafe failure.**
+`effectiveAt` is an instant (when the change happens), not a duration, and the check is `effectiveAt - now <= window`. What happens if the unit is not seconds, **without any mitigation**:
+- Milliseconds: the value is about 1000 times larger than `now` in seconds, the difference never fits in the window, and the refusal never fires. The vault would trade through a multiplier change without warning. **Unsafe.**
+- A block number or any smaller scale: the value is in the past relative to `now`, so it is ignored. **Unsafe.**
+Both unit errors fail in the unsafe direction. An earlier version of this section said the milliseconds case "refuses more"; that was wrong (it treated the instant as a duration).
 
-Mitigation in the contract, independent of the unit: any nonzero `effectiveAt` that does not look like a seconds timestamp (below 1.6e9 or above 1e11) is treated as an imminent change and the vault refuses (`test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading`). This turns the dangerous side of the error into the safe side; it does not make the unit known. The risk is dormant while no change is scheduled. `scripts/scan_pending_multiplier.sh` exits 1 and prints the raw value the first time any of the 12 tokens has one: that sample closes the question. Copy this section to the README.
+Two defences, neither of which relies on the unit being right:
+1. Plausibility: any nonzero `effectiveAt` outside 1.6e9..1e11 is treated as an imminent change and the vault refuses (`test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading`). Covers milliseconds and block numbers. A block number would only enter the plausible range after about 1.6 billion blocks.
+2. Value check, independent of `effectiveAt` entirely: the vault keeps the last observed `uiMultiplier()` per token. If the current value differs, or it changed less than `multiplierWindowSecs` ago, it refuses with `MULTIPLIER_CHANGED` (`test_multiplier_value_change_refuses_without_effectiveAt`, which never sets `effectiveAt`). `tryRebalance` and the permissionless `observeMultipliers()` persist the observation and start the settle window; `rebalance` refuses on any unacknowledged difference, so the two entry points agree (the fuzz covers it). This catches a change that already happened and one that was never scheduled. The settle window reuses `multiplierWindowSecs` and is provisional like it.
+
+The scheduled-change warning (`effectiveAt`) is therefore only an early notice; safety does not depend on it. The risk is also dormant while no change is scheduled. `scripts/scan_pending_multiplier.sh` exits 1 and prints the raw value the first time any of the 12 tokens has one: that sample closes the unit question. Copy this section to the README.
 
 ## Other unverified assumptions
 - The B20 selectors the vault reads: `effectiveAt()` for the multiplier-change window and `uiMultiplier()` for display. Written from the interface notes, not yet executed against the live precompile.
