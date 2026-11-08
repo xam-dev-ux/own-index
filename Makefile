@@ -13,7 +13,7 @@ ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -53,3 +53,11 @@ deploy-mainnet: check-keystore
 # Reads the DEPLOYED contracts from the chain and fails on any mismatch. Needs ORACLE, ADAPTER, FACTORY addresses.
 verify-mainnet:
 	@$(RUN_PARAMS) ORACLE_ADDRESS=$(ORACLE) ADAPTER_ADDRESS=$(ADAPTER) FACTORY_ADDRESS=$(FACTORY) $(FORGE) script script/VerifyMainnet.s.sol --rpc-url $(MAINNET_RPC)
+
+# Local development only: a Base fork at a US session block with oracle, adapter, factory and one funded vault live.
+# No keystore, no real keys. Writes .fork/addresses.json for the UI. See docs/fork-dev.md.
+setup-fork:
+	@scripts/setup_fork.sh
+
+stop-fork:
+	@scripts/setup_fork.sh stop
