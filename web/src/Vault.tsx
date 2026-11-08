@@ -37,7 +37,7 @@ export function Vault({ addr, vault }: { addr: Addresses; vault: `0x${string}` }
   const count = Number(data[5].result as bigint);
   return (
     <section>
-      <h2>Your vault</h2>
+      <h2>Holdings</h2>
       <p className="legend">
         <strong>{usd(value)}</strong>{" "}
         {allFresh ? <Pill tone="fresh">all prices fresh</Pill> : <Pill tone="expected">components without a fresh price are not counted</Pill>}

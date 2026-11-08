@@ -1,16 +1,39 @@
-import { useEffect, useMemo, useState } from "react";
-import { WagmiProvider, useAccount, useConnect, useDisconnect, useReadContract } from "wagmi";
+import { Component, useEffect, useMemo, useState, type ReactNode } from "react";
+import { WagmiProvider, useAccount, useChainId, useConnect, useDisconnect, useReadContract, useSwitchChain } from "wagmi";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { formatUnits } from "viem";
 import { loadAddresses, makeConfig, isFork, type Addresses } from "./config";
-import { oracleAbi, vaultAbi, DIVERGENCE } from "./abi";
-import { erc20Abi, factoryAbi } from "./abiWrite";
-import { TOKENS } from "./tokens";
-import { Vault } from "./Vault";
-import { Actions, CreateVault, Setup } from "./Actions";
-import { verdictOf, type Tone } from "./verdict";
+import { erc20Abi } from "./abiWrite";
+import { Gate } from "./Gate";
+import { Markets } from "./pages/Markets";
+import { MyVault } from "./pages/MyVault";
+import { Ledger } from "./pages/Ledger";
+import { System } from "./pages/System";
+import { About } from "./pages/About";
+import { States } from "./pages/States";
 
 const qc = new QueryClient();
+
+const ROUTES = [
+  { id: "markets", label: "Markets" },
+  { id: "vault", label: "My vault" },
+  { id: "ledger", label: "Gap ledger" },
+  { id: "system", label: "System" },
+  { id: "about", label: "How it works" },
+] as const;
+
+function useRoute() {
+  const get = () => window.location.hash.replace(/^#\/?/, "") || "markets";
+  const [r, setR] = useState(get);
+  useEffect(() => { const f = () => setR(get()); window.addEventListener("hashchange", f); return () => window.removeEventListener("hashchange", f); }, []);
+  return r;
+}
+
+class Boundary extends Component<{ children: ReactNode }, { err: string | null }> {
+  state = { err: null as string | null };
+  static getDerivedStateFromError(e: Error) { return { err: e.message }; }
+  render() { return this.state.err ? <p className="banner fault">Something went wrong rendering this page: {this.state.err}</p> : this.props.children; }
+}
 
 export function App() {
   const [addr, setAddr] = useState<Addresses | null>(null);
@@ -18,16 +41,42 @@ export function App() {
   useEffect(() => { loadAddresses().then(setAddr).catch((e) => setErr(String(e.message ?? e))); }, []);
   const config = useMemo(() => (addr ? makeConfig(addr) : null), [addr]);
   return (
-    <div className="page">
-      <header><h1>Own Index</h1><p className="sub">Self-custodial index vaults that refuse to trade against prices that are not fresh.</p></header>
-      <main>
-        {err && <p className="banner fault">{err}</p>}
-        {addr && config && (
-          <WagmiProvider config={config}><QueryClientProvider client={qc}><Wallet addr={addr} /><Marks addr={addr} /><Mine addr={addr} /></QueryClientProvider></WagmiProvider>
-        )}
+    <Gate>
+      {err && <p className="banner fault page">{err}</p>}
+      {addr && config && (
+        <WagmiProvider config={config}><QueryClientProvider client={qc}><Shell addr={addr} /></QueryClientProvider></WagmiProvider>
+      )}
+    </Gate>
+  );
+}
+
+function Shell({ addr }: { addr: Addresses }) {
+  const route = useRoute();
+  const fork = isFork(addr);
+  const nav = fork ? [...ROUTES, { id: "states", label: "All states" }] : ROUTES;
+  return (
+    <>
+      <header className="top">
+        <div className="bar">
+          <a className="brand" href="#/markets">Own<span>Index</span></a>
+          <nav>{nav.map((n) => <a key={n.id} href={`#/${n.id}`} className={route === n.id ? "on" : ""}>{n.label}</a>)}</nav>
+          <Wallet addr={addr} />
+        </div>
+        {fork && <div className="forkbanner">Local fork of Base. Nothing here is on mainnet and the funds are test funds.</div>}
+      </header>
+      <ChainGuard addr={addr} />
+      <main className="page">
+        <Boundary key={route}>
+          {route === "markets" && <Markets addr={addr} />}
+          {route === "vault" && <MyVault addr={addr} />}
+          {route === "ledger" && <Ledger addr={addr} />}
+          {route === "system" && <System addr={addr} />}
+          {route === "about" && <About />}
+          {route === "states" && fork && <States />}
+        </Boundary>
       </main>
       <Footer />
-    </div>
+    </>
   );
 }
 
@@ -36,75 +85,47 @@ function Wallet({ addr }: { addr: Addresses }) {
   const { connect, connectors, isPending } = useConnect();
   const { disconnect } = useDisconnect();
   const usdc = useReadContract({ address: addr.usdc, abi: erc20Abi, functionName: "balanceOf", args: [address!], query: { enabled: !!address, refetchInterval: 5000 } }).data;
+  if (!isConnected) {
+    return <button className="primary" disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>{isFork(addr) ? "Connect dev account" : "Connect wallet"}</button>;
+  }
   return (
-    <p className="walletbar">
-      {isConnected ? (
-        <>Connected {address!.slice(0, 6)}…{address!.slice(-4)} · {usdc !== undefined ? `$${Number(formatUnits(usdc, 6)).toLocaleString()} USDC` : ""}{isFork(addr) ? " · local fork (dev account)" : ""} <button onClick={() => disconnect()}>Disconnect</button></>
-      ) : (
-        <button disabled={isPending} onClick={() => connect({ connector: connectors[0] })}>{isFork(addr) ? "Connect dev account (local fork)" : "Connect wallet"}</button>
-      )}
-    </p>
+    <div className="wallet">
+      <span className="addr">{address!.slice(0, 6)}…{address!.slice(-4)}</span>
+      {usdc !== undefined && <span className="bal">${Number(formatUnits(usdc, 6)).toLocaleString(undefined, { maximumFractionDigits: 0 })} USDC</span>}
+      <button className="ghost" onClick={() => disconnect()}>Disconnect</button>
+    </div>
   );
 }
 
-/** The connected wallet's vault: create one, choose components, then deposit / rebalance / withdraw. */
-function Mine({ addr }: { addr: Addresses }) {
-  const { address } = useAccount();
-  const vaults = useReadContract({ address: addr.factory, abi: factoryAbi, functionName: "vaultsOf", args: [address!], query: { enabled: !!address, refetchInterval: 5000 } }).data;
-  const vault = vaults && vaults.length > 0 ? vaults[vaults.length - 1] : undefined;
-  const comps = useReadContract({ address: vault, abi: vaultAbi, functionName: "components", query: { enabled: !!vault, refetchInterval: 5000 } }).data;
-  if (!address) return <p className="note">Connect a wallet to create or view your vault.</p>;
-  if (!vaults) return <p>Looking for your vaults…</p>;
-  if (!vault) return <CreateVault addr={addr} />;
-  if (!comps) return <p>Reading the vault…</p>;
-  if (comps.length === 0) return <Setup addr={addr} vault={vault} />;
-  return <><Vault addr={addr} vault={vault} /><Actions addr={addr} vault={vault} /></>;
-}
-
-function Marks({ addr }: { addr: Addresses }) {
-  const { data, error, isLoading } = useReadContract({
-    address: addr.oracle, abi: oracleAbi, functionName: "marksOf",
-    args: [TOKENS.map((t) => t.address)], query: { refetchInterval: 5000 },
-  });
-  if (isLoading) return <p>Reading the oracle…</p>;
-  if (error || !data) return <p className="banner fault">Could not read the oracle: {error?.message}</p>;
-
-  const verdicts = data.map((m) => verdictOf(m.session, m.cause));
-  const count = (t: Tone) => verdicts.filter((v) => v.tone === t).length;
+/** A browser wallet on another network would send transactions to the wrong chain: say so and offer the switch. */
+function ChainGuard({ addr }: { addr: Addresses }) {
+  const { isConnected } = useAccount();
+  const chainId = useChainId();
+  const { switchChain } = useSwitchChain();
+  const { connector } = useAccount();
+  const walletChain = useReadWalletChain();
+  if (!isConnected || walletChain === null || walletChain === addr.chainId) return null;
   return (
-    <section>
-      <h2>Session verdicts</h2>
-      <p className="legend">
-        <Pill tone="fresh">{count("fresh")} fresh</Pill>
-        <Pill tone="closed">{count("closed")} closed (normal)</Pill>
-        <Pill tone="expected">{count("expected")} awaiting first print</Pill>
-        <Pill tone="paused">{count("paused")} paused</Pill>
-        <Pill tone="fault">{count("fault")} fault</Pill>
-      </p>
-      <table>
-        <thead><tr><th>Token</th><th>Verdict</th><th className="num">Price</th><th className="num">Age</th><th>24/7 comparison</th></tr></thead>
-        <tbody>
-          {TOKENS.map((t, i) => {
-            const m = data[i]; const v = verdicts[i];
-            return (
-              <tr key={t.symbol}>
-                <td><strong>{t.symbol}</strong></td>
-                <td title={v.explain}><Pill tone={v.tone}>{v.label}</Pill><div className="why">{v.explain}</div></td>
-                <td className="num">{m.price > 0n ? `$${Number(formatUnits(m.price, 8)).toFixed(2)}` : "—"}</td>
-                <td className="num">{m.stalenessSecs < 100000 ? fmtAge(m.stalenessSecs) : "—"}</td>
-                <td>{DIVERGENCE[m.divergenceStatus]?.toLowerCase().replace(/_/g, " ")}{m.divergenceStatus === 5 ? ` · ${Number(m.divergenceBps)} bps` : ""}</td>
-              </tr>
-            );
-          })}
-        </tbody>
-      </table>
-      <p className="note">Prices are the primary Chainlink feed, already including the corporate-action multiplier. The 24/7 comparison is reported alongside and never replaces the primary price. This is reference data, not a liquidation oracle.</p>
-    </section>
+    <div className="chainwarn">Your wallet is on another network (chain {walletChain}). Switch to Base before sending anything.{" "}
+      <button onClick={() => switchChain({ chainId: addr.chainId })}>Switch to Base</button>
+      <span hidden>{chainId}{connector?.id}</span>
+    </div>
   );
 }
 
-function fmtAge(s: number) { return s < 90 ? `${s}s` : s < 5400 ? `${Math.round(s / 60)}m` : `${(s / 3600).toFixed(1)}h`; }
-function Pill({ tone, children }: { tone: Tone; children: React.ReactNode }) { return <span className={`pill ${tone}`}>{children}</span>; }
+function useReadWalletChain(): number | null {
+  const { connector, isConnected } = useAccount();
+  const [id, setId] = useState<number | null>(null);
+  useEffect(() => {
+    if (!isConnected || !connector) { setId(null); return; }
+    let live = true;
+    connector.getChainId().then((c) => { if (live) setId(c); }).catch(() => { if (live) setId(null); });
+    const onChange = (d: { chainId?: number }) => { if (d.chainId) setId(d.chainId); };
+    connector.emitter?.on("change", onChange);
+    return () => { live = false; connector.emitter?.off("change", onChange); };
+  }, [connector, isConnected]);
+  return id;
+}
 
 function Footer() {
   return (
@@ -114,7 +135,8 @@ function Footer() {
         investment product, offers no advice or recommendation, pools no funds, issues no token or share, and manages
         nothing on your behalf. You can withdraw everything in kind at any time. Tokenized stocks may not be available
         to you depending on where you live; you are responsible for checking whether you are eligible. WeekendMark is
-        reference data and is explicitly not a liquidation oracle. Smart contracts can fail. Use at your own risk.
+        reference data and is explicitly not a liquidation oracle. Smart contracts can fail and these ones are not
+        audited. Use at your own risk.
       </p>
     </footer>
   );
