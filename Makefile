@@ -13,7 +13,7 @@ ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend fork-states
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -65,3 +65,7 @@ stop-fork:
 # Moves the running fork to Saturday (oracle CLOSED/WEEKEND) and records a MARKET_CLOSED refusal.
 fork-weekend:
 	@scripts/fork_weekend.sh
+
+# Stages that make the real oracle classify PAUSED, FAULT and AWAITING_FIRST_PRINT on the fork. Usage: make fork-states STAGE=pause|stale|reopen
+fork-states:
+	@scripts/fork_states.sh $(STAGE)
