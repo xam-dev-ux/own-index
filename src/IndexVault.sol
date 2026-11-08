@@ -139,10 +139,19 @@ contract IndexVault is IIndexVault {
         }
     }
 
+    /// @dev The unit of `effectiveAt()` has not been seen with a live pending change (none exists on chain).
+    /// It is read as a unix timestamp in seconds. Any nonzero value that does not look like one (a block number,
+    /// a millisecond timestamp, anything else) is treated as an imminent change, so a wrong unit can only make the
+    /// vault refuse more, never trade through a multiplier change it failed to see.
+    uint256 private constant MIN_PLAUSIBLE_SECONDS = 1_600_000_000;
+    uint256 private constant MAX_PLAUSIBLE_SECONDS = 100_000_000_000;
+
     function _multiplierImminent(address token, uint256 window) internal view returns (bool) {
         (bool ok, bytes memory ret) = token.staticcall(abi.encodeWithSignature("effectiveAt()"));
         if (!ok || ret.length < 32) return false;
         uint256 at = abi.decode(ret, (uint256));
+        if (at == 0) return false;
+        if (at < MIN_PLAUSIBLE_SECONDS || at > MAX_PLAUSIBLE_SECONDS) return true;
         return at >= block.timestamp && at - block.timestamp <= window;
     }
 
@@ -232,7 +241,7 @@ contract IndexVault is IIndexVault {
     }
 
     /// @dev Runs the router calls and then enforces, on balance deltas valued at oracle prices:
-    ///  (1) every component moved by at most its immutable cap, and
+    ///  (1) every component moved by at most its immutable cap, summed over the legs of the batch (gross, not net), and
     ///  (2) the value lost across the batch is at most `maxSlippageBps` of the value bought.
     /// External only so that a failure can be caught (tryRebalance) and its swaps rolled back as a unit.
     function executeTrade(bytes[] calldata swaps) external {
@@ -254,34 +263,47 @@ contract IndexVault is IIndexVault {
         beforeBal[len] = IERC20Min(usdc).balanceOf(address(this));
         _approve(usdc, router, type(uint256).max);
 
+        uint256[] memory gross = new uint256[](len);
         for (uint256 i; i < swaps.length; ++i) {
+            uint256[] memory pre = _componentBalances(len);
             (bool ok,) = router.call(swaps[i]);
             if (!ok) revert SwapFailed(i);
+            _accumulateGross(gross, pre, prices);
         }
 
         for (uint256 i; i < len; ++i) _approve(_components[i].token, router, 0);
         _approve(usdc, router, 0);
 
-        _checkOutcome(prices, beforeBal);
+        _checkOutcome(prices, beforeBal, gross);
     }
 
-    function _checkOutcome(uint256[] memory prices, uint256[] memory beforeBal) internal view {
+    function _componentBalances(uint256 len) internal view returns (uint256[] memory b) {
+        b = new uint256[](len);
+        for (uint256 i; i < len; ++i) b[i] = IERC20Min(_components[i].token).balanceOf(address(this));
+    }
+
+    /// @dev Adds, per component, the absolute value moved by ONE router call. Summing legs (not netting them) is what
+    /// stops a buy and a sell of the same component in one batch from cancelling in the cap. No calldata is read.
+    function _accumulateGross(uint256[] memory gross, uint256[] memory pre, uint256[] memory prices) internal view {
+        for (uint256 i; i < gross.length; ++i) {
+            address t = _components[i].token;
+            uint256 post = IERC20Min(t).balanceOf(address(this));
+            uint256 d = post >= pre[i] ? post - pre[i] : pre[i] - post;
+            if (d != 0) gross[i] += _valueOf(t, d, prices[i]);
+        }
+    }
+
+    function _checkOutcome(uint256[] memory prices, uint256[] memory beforeBal, uint256[] memory gross) internal view {
         uint256 len = prices.length;
         uint256 bought;
         uint256 sold;
         for (uint256 i; i < len; ++i) {
             address t = _components[i].token;
-            uint256 afterBal = IERC20Min(t).balanceOf(address(this));
-            uint256 moved;
-            if (afterBal >= beforeBal[i]) {
-                moved = _valueOf(t, afterBal - beforeBal[i], prices[i]);
-                bought += moved;
-            } else {
-                moved = _valueOf(t, beforeBal[i] - afterBal, prices[i]);
-                sold += moved;
-            }
             uint256 cap = factory.capOf(t);
-            if (moved > cap) revert ImpactCapExceeded(t, moved, cap);
+            if (gross[i] > cap) revert ImpactCapExceeded(t, gross[i], cap);
+            uint256 afterBal = IERC20Min(t).balanceOf(address(this));
+            if (afterBal >= beforeBal[i]) bought += _valueOf(t, afterBal - beforeBal[i], prices[i]);
+            else sold += _valueOf(t, beforeBal[i] - afterBal, prices[i]);
         }
         uint256 usdcAfter = IERC20Min(factory.usdc()).balanceOf(address(this));
         if (usdcAfter >= beforeBal[len]) bought += usdcAfter - beforeBal[len];

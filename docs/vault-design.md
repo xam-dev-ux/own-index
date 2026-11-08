@@ -50,7 +50,7 @@ Limits of this evidence: one block, buy direction only (USDC in), not the sell d
 ### Order of the gates
 In `_checkOutcome` the per-component cap is checked inside the loop, and reverts hard, before the batch slippage is evaluated. They are two gates in series: a component over its cap refuses the whole batch even if the batch as a whole lost nothing (`test_impact_cap_exceeded_rolls_back_whole_batch` has zero aggregate loss and still reverts on the cap). The aggregate cannot dilute the cap.
 
-Caveat: the cap compares the **net** balance change of a component across the batch, not the gross size of each swap. Two swaps on the same pool in one batch add up if they go the same way, but a buy and a sell on the same component partly cancel in the net and are not seen by the cap.
+The cap is compared against **gross** movement, not net. `executeTrade` reads each component's balance before and after every router call and sums the absolute value moved per leg, so buying $8,000 and selling $3,000 of the same component in one batch counts $11,000, not $5,000 (`test_buy_and_sell_of_same_component_do_not_cancel_in_the_cap`). This closes the hole without reading router calldata. A rule of one swap per component was considered and rejected: without interpreting the calldata the vault cannot know which component a swap names. Cost: two balance reads per component per leg.
 
 ### What the cap is compared against
 The vault does not parse router calldata. After the router calls it values, at oracle prices, the balance change of each component and requires `moved <= cap` for each. Because that happens after the swaps, a breach reverts the whole batch (rolled back as a unit) and `tryRebalance` records it as `IMPACT_CAP_EXCEEDED`.
@@ -64,7 +64,16 @@ All pre-trade checks live in one internal `_evaluate(action)` returning the set 
 - Rebalance drift is measured over component values only. USDC held in the vault is not part of the weights; initial buying uses `deposit(usdc, swaps)`.
 - Withdrawal of everything skips a token whose transfer fails so one bad token cannot block the others; `withdraw(asset, ...)` reaches it individually.
 
-## Unverified assumptions to confirm on a fork
+## Open assumption: the unit of `effectiveAt()`
+Verified on the live B20s (fork at block 54457318): the functions exist, `uiMultiplier()` is WAD-scaled, `toUIAmount` agrees with `balance * uiMultiplier / 1e18`. **Not verified: the unit of `effectiveAt()`.** All 298 listed tokens return 0 (nothing scheduled), so no live sample exists. It is assumed to be a unix timestamp in seconds, which is what base-stocks documents.
+
+What happens if the assumption is wrong:
+- Milliseconds, or any scale that makes the value look huge: read as seconds the window is far too long, so the vault refuses more than needed. Safe.
+- A block number, or any scale that makes the value look small: read as seconds it would be in the past, so the vault would not see a coming change and could trade through a multiplier change. **This is the only way an unverified assumption here produces an unsafe failure.**
+
+Mitigation in the contract, independent of the unit: any nonzero `effectiveAt` that does not look like a seconds timestamp (below 1.6e9 or above 1e11) is treated as an imminent change and the vault refuses (`test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading`). This turns the dangerous side of the error into the safe side; it does not make the unit known. The risk is dormant while no change is scheduled. `scripts/scan_pending_multiplier.sh` exits 1 and prints the raw value the first time any of the 12 tokens has one: that sample closes the question. Copy this section to the README.
+
+## Other unverified assumptions
 - The B20 selectors the vault reads: `effectiveAt()` for the multiplier-change window and `uiMultiplier()` for display. Written from the interface notes, not yet executed against the live precompile.
 - The router the factory is deployed with, and its calldata, are not chosen yet. Tests use a mock router.
 - `multiplierWindowSecs` is a constructor value, not yet chosen.

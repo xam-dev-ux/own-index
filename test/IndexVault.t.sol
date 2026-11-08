@@ -280,6 +280,38 @@ contract IndexVaultTest is Test {
         assertEq(vault.rebalanceCount(), 1);
     }
 
+    /// Buy $8,000 of A and sell $3,000 of A in one batch: the net is $5,000 (exactly the cap) but the gross is $11,000.
+    function test_buy_and_sell_of_same_component_do_not_cancel_in_the_cap() public {
+        a.mint(address(vault), 100e8); // $10,000
+        b.mint(address(vault), 400e8); // $20,000 -> 33/67, drift above threshold
+        bytes[] memory s = new bytes[](2);
+        s[0] = _swap(address(b), 160e8, address(a), 80e8); // buy $8,000 of A
+        s[1] = _swap(address(a), 30e8, address(b), 60e8); // sell $3,000 of A
+        vm.prank(user);
+        vm.expectRevert(abi.encodeWithSelector(IIndexVault.ImpactCapExceeded.selector, address(a), 11_000e6, CAP));
+        vault.rebalance(s);
+        vm.prank(user);
+        assertFalse(vault.tryRebalance(s));
+        assertEq(vault.refusalCount(), 1);
+    }
+
+    function test_effectiveAt_in_an_unexpected_unit_refuses_instead_of_trading() public {
+        _fund();
+        _skew();
+        bytes[] memory s = _rebalanceSwaps();
+        a.setEffectiveAt(55_000_000); // looks like a block number
+        (bool possible,,,) = vault.rebalanceStatus();
+        assertFalse(possible);
+        a.setEffectiveAt(block.timestamp * 1000 + 600_000); // looks like milliseconds
+        (possible,,,) = vault.rebalanceStatus();
+        assertFalse(possible);
+        vm.prank(user);
+        assertFalse(vault.tryRebalance(s));
+        a.setEffectiveAt(block.timestamp - 1 days); // a plausible past timestamp: already applied
+        (possible,,,) = vault.rebalanceStatus();
+        assertTrue(possible);
+    }
+
     function test_slippage_beyond_rule_is_refused_and_recorded() public {
         _fund();
         _skew();
