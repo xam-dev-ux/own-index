@@ -45,6 +45,8 @@ Criterion (stated before reading the result): the largest swept size whose *real
 | CRCL | 48.2 bps at $10,000 ($15,000 gives 58.9) | 10,000 |
 | the other ten | under 6 bps at $50,000 (largest MSTR 5.6) | 50,000 |
 
+The pools use a **dynamic fee** and an MEV tax module. These caps were measured at the fee of block 54457318 and may move; the effect of the MEV tax on a swap sent with a high priority fee is **unknown**, not assumed zero.
+
 Limits of this evidence: one block, buy direction only (USDC in), not the sell direction; the fork is not the live chain. The cap for the ten deep pools is the edge of what was measured, not a property of the pool. Rounding down to a swept size is deliberate: the figures are measured points, not interpolations.
 
 ### Order of the gates
@@ -98,12 +100,16 @@ Checked at the pinned fork block (`test/IndexVault.slipstream.fork.t.sol`):
 - A 12-leg `exactInputSingle` basket through the vault sends USDC into those pools (each pool's USDC balance rises by at least 99% of the leg) and the vault ends holding the tokens. Value after buying with 9,600 USDC: 9,596.58 USDC, 3.4 bps below what was paid, inside the 100 bps rule.
 - A $6,000 INTC leg reverts with `ImpactCapExceeded` on the real router.
 
-**What the vault does not enforce:** which pool a leg uses. `exactInputSingle` picks the pool from the token pair and `tickSpacing`, so the correspondence with the evidence holds when the client builds legs with tick spacing 10 and the USDC pair. The router also accepts multi-hop `exactInput` paths and other tick spacings; the vault does not read calldata, so it would not notice. What still protects the user in that case is the value check on balances (slippage) and the gross cap, which are in value terms, not pool terms. The cap would no longer be derived from the pool actually used. Closing it fully would need either reading the selector and tick spacing from calldata (crossing the line we agreed not to cross) or an adapter contract that only exposes single-hop swaps on tick spacing 10. Not done; decision pending.
+**SlipstreamAdapter closes the route question structurally.** The factory's `router` is not the Aero router but `src/SlipstreamAdapter.sol`, which exposes only `buy(token, usdcIn, minOut)` and `sell(token, tokenIn, minOut)`: single hop, USDC against one listed token, tick spacing fixed at 10, output always sent to the caller. Its constructor takes the token and pool lists and reverts unless `getPool(USDC, token, 10)` equals the pool given, so it can only be built over the pools in `data/impact.json`. It has no owner, no setters, holds no funds and resets its approval. There is no multi-hop path and no other pair to reach, so the vault does not need to read calldata, and the cap for a token always refers to the pool the evidence was taken from. Tests: `test/SlipstreamAdapter.t.sol` (mock) and the fork suite (a multi-hop `exactInput` leg and an unlisted token both fail with `SwapFailed`; a sell round trip passes the same gated path).
+
+What this does not cover: the adapter pins the *pool*, not the *price*. Value protection is still the vault's balance check at oracle prices.
 
 Not measured: the pools use a dynamic fee hook and an MEV tax module (both listed in the deployment file). The fee in `data/impact.json` is a snapshot; the effect of the MEV tax on a swap sent with a high priority fee is unknown.
 
-### Gas of the per-leg balance checks (fork, pinned block)
-12 legs, 12 components: 5.45M gas through the vault versus 4.09M for the same 12 swaps sent directly: 1.36M extra (about 33%), including approvals and the final checks. The extra grows with legs times components (two balance reads per component per leg); the worst case of 20 components and many legs was not measured. At Base fees the amount is small; the block limit is not a concern at these sizes.
+### Gas (fork, pinned block, real router and pools)
+- Same 12 swaps sent straight to the router from an account: 4.09M.
+- Through vault and adapter, 12 legs / 12 components: 6.16M. Of the 2.07M over the baseline, the adapter's extra transfer and approve per leg and the vault's per-leg balance reads and approvals are both included; they were not separated. (Through the vault with the raw router, before the adapter existed: 5.45M.)
+- Worst case, 20 components and 20 legs (12 real pools, 8 repeated buys, 8 padding components with no pool): 8.21M. That is a single `deposit`. Base's current block gas limit was not checked here, so no claim is made about headroom beyond the measured figure.
 
 ## Not decided here
 Whether to enforce single-hop tick-spacing-10 legs with an adapter, `multiplierWindowSecs`, and the sell-direction impact sweep.

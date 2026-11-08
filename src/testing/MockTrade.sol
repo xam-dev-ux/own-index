@@ -110,3 +110,41 @@ contract MockOracle is ISessionOracle {
         for (uint256 i; i < tokens.length; ++i) out[i] = marks[tokens[i]];
     }
 }
+
+/// @notice TEST ONLY. Stands in for the Slipstream factory and router: one pool per (pair, tick spacing).
+contract MockSlipstream {
+    mapping(bytes32 => address) public pools;
+    uint256 public lastTickSpacing;
+
+    function factory() external view returns (address) {
+        return address(this);
+    }
+
+    function setPool(address a, address b, int24 ts, address pool) external {
+        pools[keccak256(abi.encode(a < b ? a : b, a < b ? b : a, ts))] = pool;
+    }
+
+    function getPool(address a, address b, int24 ts) external view returns (address) {
+        return pools[keccak256(abi.encode(a < b ? a : b, a < b ? b : a, ts))];
+    }
+
+    struct P {
+        address tokenIn;
+        address tokenOut;
+        int24 tickSpacing;
+        address recipient;
+        uint256 deadline;
+        uint256 amountIn;
+        uint256 amountOutMinimum;
+        uint160 sqrtPriceLimitX96;
+    }
+
+    /// 1:1 in raw units; enough to test who receives what.
+    function exactInputSingle(P calldata p) external returns (uint256) {
+        lastTickSpacing = uint256(int256(p.tickSpacing));
+        MockToken(p.tokenIn).transferFrom(msg.sender, address(this), p.amountIn);
+        MockToken(p.tokenOut).transfer(p.recipient, p.amountIn);
+        require(p.amountIn >= p.amountOutMinimum, "min");
+        return p.amountIn;
+    }
+}

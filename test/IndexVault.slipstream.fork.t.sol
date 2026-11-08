@@ -5,7 +5,8 @@ import {Test, console} from "forge-std/Test.sol";
 import {IIndexVault} from "../src/IIndexVault.sol";
 import {IndexVault} from "../src/IndexVault.sol";
 import {IndexVaultFactory} from "../src/IndexVaultFactory.sol";
-import {MockOracle} from "../src/testing/MockTrade.sol";
+import {MockOracle, MockToken} from "../src/testing/MockTrade.sol";
+import {SlipstreamAdapter, ISlipstreamSwapRouter} from "../src/SlipstreamAdapter.sol";
 
 interface ISlipstreamRouter {
     struct ExactInputSingleParams {
@@ -74,6 +75,7 @@ contract IndexVaultSlipstreamForkTest is Test {
     ];
 
     MockOracle oracle;
+    SlipstreamAdapter adapter;
     IndexVault vault;
     address user = address(0xA11CE);
     address[] toks;
@@ -92,7 +94,11 @@ contract IndexVaultSlipstreamForkTest is Test {
             c[i] = IIndexVault.Component(t[i], i < 8 ? 833 : 834);
             oracle.fresh(t[i], int256(_spotPrice8(vm.parseAddress(POOL[i]))));
         }
-        IndexVaultFactory f = new IndexVaultFactory(oracle, USDC, ROUTER, 1 hours, t, caps);
+        address[] memory pools = new address[](n);
+        for (uint256 i; i < n; ++i) pools[i] = vm.parseAddress(POOL[i]);
+        // the adapter constructor itself refuses any pool that is not the one in the evidence
+        adapter = new SlipstreamAdapter(ISlipstreamSwapRouter(ROUTER), USDC, t, pools);
+        IndexVaultFactory f = new IndexVaultFactory(oracle, USDC, address(adapter), 1 hours, t, caps);
         vm.prank(user);
         vault = IndexVault(f.createVault());
         vm.startPrank(user);
@@ -112,17 +118,80 @@ contract IndexVaultSlipstreamForkTest is Test {
     }
 
     function _leg(address token, uint256 usdcIn) internal view returns (bytes memory) {
-        return abi.encodeCall(
-            ISlipstreamRouter.exactInputSingle,
-            (ISlipstreamRouter.ExactInputSingleParams(USDC, token, TS, address(vault), block.timestamp, usdcIn, 0, 0))
-        );
+        return abi.encodeCall(SlipstreamAdapter.buy, (token, usdcIn, 0));
     }
 
     function test_router_and_measured_pools_correspond() public view {
+        assertEq(address(adapter.router()), ROUTER);
+        assertEq(adapter.listedTokens().length, 12);
         assertEq(ISlipstreamRouter(ROUTER).factory(), CL_FACTORY);
         for (uint256 i; i < 12; ++i) {
             assertEq(IClFactory(CL_FACTORY).getPool(USDC, toks[i], TS), vm.parseAddress(POOL[i]), "pool differs from evidence");
         }
+    }
+
+    function test_legs_the_adapter_does_not_expose_cannot_reach_the_router() public {
+        // multi-hop and arbitrary router calldata is not reachable: the vault's only counterparty is the adapter
+        bytes[] memory legs = new bytes[](1);
+        legs[0] = abi.encodeWithSignature("exactInput((bytes,address,uint256,uint256,uint256))");
+        vm.prank(user);
+        vm.expectPartialRevert(IIndexVault.SwapFailed.selector);
+        vault.deposit(1_000e6, legs);
+
+        // a token that is not in the evidence set is refused by the adapter, so the leg fails
+        legs[0] = abi.encodeCall(SlipstreamAdapter.buy, (address(0xBEEF), 1_000e6, 0));
+        vm.prank(user);
+        vm.expectPartialRevert(IIndexVault.SwapFailed.selector);
+        vault.deposit(1_000e6, legs);
+    }
+
+    function test_sell_leg_round_trip_through_the_adapter() public {
+        bytes[] memory legs = new bytes[](1);
+        legs[0] = _leg(toks[0], 800e6);
+        vm.prank(user);
+        vault.deposit(800e6, legs);
+        uint256 bal = IERC20(toks[0]).balanceOf(address(vault));
+        bytes[] memory sell = new bytes[](1);
+        sell[0] = abi.encodeCall(SlipstreamAdapter.sell, (toks[0], bal, 0));
+        vm.prank(user);
+        vault.deposit(0, sell); // goes through the same gated, checked path
+        assertEq(IERC20(toks[0]).balanceOf(address(vault)), 0);
+        assertGe(IERC20(USDC).balanceOf(address(vault)), 800e6 * 99 / 100);
+    }
+
+    /// Worst case of the per-leg balance reads: 20 components and 20 legs (12 real pools, then 8 repeated buys).
+    function test_gas_20_components_20_legs() public {
+        address[] memory t = new address[](20);
+        uint256[] memory caps = new uint256[](20);
+        IIndexVault.Component[] memory c = new IIndexVault.Component[](20);
+        address[] memory pools = new address[](12);
+        address[] memory real = new address[](12);
+        for (uint256 i; i < 20; ++i) {
+            t[i] = i < 12 ? toks[i] : address(new MockToken("PAD", 8));
+            caps[i] = 50_000e6;
+            c[i] = IIndexVault.Component(t[i], 500);
+            oracle.fresh(t[i], i < 12 ? int256(_spotPrice8(vm.parseAddress(POOL[i]))) : int256(100e8));
+            if (i < 12) {
+                pools[i] = vm.parseAddress(POOL[i]);
+                real[i] = toks[i];
+            }
+        }
+        SlipstreamAdapter ad = new SlipstreamAdapter(ISlipstreamSwapRouter(ROUTER), USDC, real, pools);
+        IndexVaultFactory f = new IndexVaultFactory(oracle, USDC, address(ad), 1 hours, t, caps);
+        vm.prank(user);
+        IndexVault v = IndexVault(f.createVault());
+        vm.startPrank(user);
+        v.setComponents(c);
+        v.setRules(IIndexVault.Rules({driftThresholdBps: 100, minRebalanceInterval: 0, maxSlippageBps: 100}));
+        (bool ok,) = USDC.call(abi.encodeWithSignature("approve(address,uint256)", address(v), type(uint256).max));
+        assertTrue(ok);
+        bytes[] memory legs = new bytes[](20);
+        for (uint256 i; i < 20; ++i) legs[i] = abi.encodeCall(SlipstreamAdapter.buy, (toks[i % 12], 800e6, 0));
+        uint256 g = gasleft();
+        v.deposit(16_000e6, legs);
+        g -= gasleft();
+        vm.stopPrank();
+        console.log("gas, deposit with 20 legs / 20 components:", g);
     }
 
     function test_basket_buy_through_real_router_hits_the_measured_pools() public {
