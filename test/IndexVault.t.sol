@@ -270,6 +270,16 @@ contract IndexVaultTest is Test {
         assertEq(a.balanceOf(address(vault)), aBefore, "first leg must be rolled back too");
     }
 
+    function test_leg_exactly_at_cap_passes_inside_a_large_batch() public {
+        a.mint(address(vault), 200e8); // $20,000
+        b.mint(address(vault), 100e8); // $5,000 -> 80/20
+        bytes[] memory s = new bytes[](1);
+        s[0] = _swap(address(a), 50e8, address(b), 100e8); // $5,000 sold = the cap exactly
+        vm.prank(user);
+        vault.rebalance(s);
+        assertEq(vault.rebalanceCount(), 1);
+    }
+
     function test_slippage_beyond_rule_is_refused_and_recorded() public {
         _fund();
         _skew();

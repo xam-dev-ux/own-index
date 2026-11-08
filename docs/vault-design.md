@@ -37,15 +37,20 @@ Calibration versus safety: the oracle threshold is a calibration (statistical, i
 **Assumed consequence, not a discovered limitation:** the cap reflects the liquidity at the factory's deployment. If liquidity of a pool changes materially, the remedy is a new factory and new vaults, not an adjustment.
 
 ### How the numbers are derived
-Criterion (stated before reading the result): the largest swept size whose *real* swap price impact, fee excluded, is at most 50 bps, which is half the 100 bps eligibility gate. Data: `data/impact_sweep.csv`, produced by `docs/fork-check/ImpactSweep.t.sol`, real `pool.swap` on a fork pinned at block 54457318, sizes $500 to $50,000. The sweep ceiling is $50,000; a token that never reaches 50 bps by then gets the ceiling.
+Criterion (stated before reading the result): the largest swept size whose *real* swap price impact, fee excluded, is at most 50 bps, which is half the 100 bps eligibility gate. Data: `data/impact_sweep.csv`, produced by `docs/fork-check/ImpactSweep.t.sol`, real `pool.swap` on a fork pinned at block 54457318, sizes $500 to $50,000. The sweep ceiling is $50,000; a token that never reaches 50 bps by then gets the ceiling. **For those ten, $50,000 is where the measurement stopped, not a measured safe limit of the pool.** Nothing above $50,000 was measured because nothing needed it.
 
 | Token | Real impact at largest size still under the criterion | Cap (USDC) |
 |---|---|---|
 | INTC | 46.3 bps at $5,000 ($7,500 gives 62.6) | 5,000 |
 | CRCL | 48.2 bps at $10,000 ($15,000 gives 58.9) | 10,000 |
-| the other ten | under 6 bps at $50,000 (largest MSTR 5.6) | 50,000 (sweep ceiling, not a measured limit) |
+| the other ten | under 6 bps at $50,000 (largest MSTR 5.6) | 50,000 |
 
 Limits of this evidence: one block, buy direction only (USDC in), not the sell direction; the fork is not the live chain. The cap for the ten deep pools is the edge of what was measured, not a property of the pool. Rounding down to a swept size is deliberate: the figures are measured points, not interpolations.
+
+### Order of the gates
+In `_checkOutcome` the per-component cap is checked inside the loop, and reverts hard, before the batch slippage is evaluated. They are two gates in series: a component over its cap refuses the whole batch even if the batch as a whole lost nothing (`test_impact_cap_exceeded_rolls_back_whole_batch` has zero aggregate loss and still reverts on the cap). The aggregate cannot dilute the cap.
+
+Caveat: the cap compares the **net** balance change of a component across the batch, not the gross size of each swap. Two swaps on the same pool in one batch add up if they go the same way, but a buy and a sell on the same component partly cancel in the net and are not seen by the cap.
 
 ### What the cap is compared against
 The vault does not parse router calldata. After the router calls it values, at oracle prices, the balance change of each component and requires `moved <= cap` for each. Because that happens after the swaps, a breach reverts the whole batch (rolled back as a unit) and `tryRebalance` records it as `IMPACT_CAP_EXCEEDED`.
