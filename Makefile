@@ -13,7 +13,7 @@ ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-oracle-sepolia deploy-oracle-mainnet
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -37,10 +37,19 @@ rehearse-dry:
 rehearse-sepolia: check-keystore
 	$(FORGE) script script/RehearseSepolia.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast
 
-deploy-oracle-sepolia: check-keystore
-	$(FORGE) script script/DeploySessionOracle.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast
+PARAMS ?= deploy/mainnet.params.env
+RUN_PARAMS = set -a; . $(PARAMS); set +a;
 
-deploy-oracle-mainnet: check-keystore
+# Mainnet. All three need deploy/mainnet.params.env with no PENDING / DISPOSABLE value left.
+# Simulation only: no keystore, nothing sent. Reads the live chain, runs the whole deployment locally.
+deploy-mainnet-dry:
+	@$(RUN_PARAMS) $(FORGE) script script/DeployMainnet.s.sol --fork-url $(MAINNET_RPC)
+
+deploy-mainnet: check-keystore
 	@echo "WARNING: MAINNET deployment. Ctrl-C within 5 seconds to abort."
 	@sleep 5
-	$(FORGE) script script/DeploySessionOracle.s.sol --rpc-url $(MAINNET_RPC) --account $(ACCOUNT) --broadcast
+	@$(RUN_PARAMS) $(FORGE) script script/DeployMainnet.s.sol --rpc-url $(MAINNET_RPC) --account $(ACCOUNT) --broadcast
+
+# Reads the DEPLOYED contracts from the chain and fails on any mismatch. Needs ORACLE, ADAPTER, FACTORY addresses.
+verify-mainnet:
+	@$(RUN_PARAMS) ORACLE_ADDRESS=$(ORACLE) ADAPTER_ADDRESS=$(ADAPTER) FACTORY_ADDRESS=$(FACTORY) $(FORGE) script script/VerifyMainnet.s.sol --rpc-url $(MAINNET_RPC)
