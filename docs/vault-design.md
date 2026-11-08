@@ -89,5 +89,21 @@ The scheduled-change warning (`effectiveAt`) is therefore only an early notice; 
 - The router the factory is deployed with, and its calldata, are not chosen yet. Tests use a mock router.
 - `multiplierWindowSecs` is a constructor value, not yet chosen.
 
+## Router: Aero Slipstream, same factory as the measured pools
+Router `0x9Ee35Bf1bd69a03c6F0393582030fCe8Bb93D418`, from Aero's own deployment file (`dromos-labs/metadex-slipstream-public`, `cl-base.json`, key `swapRouter`, whose constructor args name factory `0x9CB22058...7a76`). It is not the router in Aerodrome's older public docs, which points at factory `0x5e7BB104...809A` and does not know these pools.
+
+Checked at the pinned fork block (`test/IndexVault.slipstream.fork.t.sol`):
+- `router.factory()` equals the factory the liquidity was measured on.
+- For all 12 tokens, `getPool(USDC, token, 10)` returns exactly the pool in `data/impact.json`.
+- A 12-leg `exactInputSingle` basket through the vault sends USDC into those pools (each pool's USDC balance rises by at least 99% of the leg) and the vault ends holding the tokens. Value after buying with 9,600 USDC: 9,596.58 USDC, 3.4 bps below what was paid, inside the 100 bps rule.
+- A $6,000 INTC leg reverts with `ImpactCapExceeded` on the real router.
+
+**What the vault does not enforce:** which pool a leg uses. `exactInputSingle` picks the pool from the token pair and `tickSpacing`, so the correspondence with the evidence holds when the client builds legs with tick spacing 10 and the USDC pair. The router also accepts multi-hop `exactInput` paths and other tick spacings; the vault does not read calldata, so it would not notice. What still protects the user in that case is the value check on balances (slippage) and the gross cap, which are in value terms, not pool terms. The cap would no longer be derived from the pool actually used. Closing it fully would need either reading the selector and tick spacing from calldata (crossing the line we agreed not to cross) or an adapter contract that only exposes single-hop swaps on tick spacing 10. Not done; decision pending.
+
+Not measured: the pools use a dynamic fee hook and an MEV tax module (both listed in the deployment file). The fee in `data/impact.json` is a snapshot; the effect of the MEV tax on a swap sent with a high priority fee is unknown.
+
+### Gas of the per-leg balance checks (fork, pinned block)
+12 legs, 12 components: 5.45M gas through the vault versus 4.09M for the same 12 swaps sent directly: 1.36M extra (about 33%), including approvals and the final checks. The extra grows with legs times components (two balance reads per component per leg); the worst case of 20 components and many legs was not measured. At Base fees the amount is small; the block limit is not a concern at these sizes.
+
 ## Not decided here
-Router choice and calldata construction (client side), `multiplierWindowSecs`, and the sell-direction impact sweep.
+Whether to enforce single-hop tick-spacing-10 legs with an adapter, `multiplierWindowSecs`, and the sell-direction impact sweep.
