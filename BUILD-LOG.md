@@ -50,13 +50,21 @@ I planned a per-token silence threshold from a high percentile of the gaps betwe
 ### 14. Twelve tokens became ten
 A live Monday-session sweep (18:04 UTC) showed INTC and CRCL usable: 37 bps and 14.7 bps at 500 USDC. At two Friday session blocks the same pools cost 94 to 105 bps and almost nothing respectively. The rule fixed beforehand is the minimum over session blocks, so both leave the index; a good block does not say anything about the worst case. The caps that remain: MSFT 20,000, NVDA, SNDK and SPCX 30,000, TSLA 7,500, the other five at the sweep ceiling of 50,000, which is where measurement stopped. With ten tokens the development vault deposits 8,000 USDC through the real pools with no slippage refusal, which the twelve-token vault could not.
 
+### 15. A calendar that stops where my knowledge stops
+`CALENDAR_CONFIRMED_UNTIL` is 2026-12-24, not March. I declared Thanksgiving and nothing later, and with a 14-hour silence threshold an undeclared holiday could read FRESH for hours: the vault would trade against a day-old price on a closed market. So the oracle is told not to claim a calendar it has not loaded; past the date it answers "calendar not loaded" and the vaults refuse. That is a deliberate decision, not a limitation: it is the same rule as everywhere else, refuse rather than guess. It does create a dated obligation. On 2026-12-24 the oracle refuses everything unless Christmas and New Year closures are declared and the horizon is extended. Safe, but a cliff. `scripts/check_calendar_horizon.sh <oracle>` exits 1 when fewer than 14 days remain; it must run on a schedule from early December, because on the day nobody will remember this was decided on 2026-11-09.
+
+### 16. The divergence states, against real prints
+`COMPARED` and `PRINTS_TOO_FAR_APART` had only been seen with mocks. `test/SessionOracle.realprints.fork.t.sol` forks four historical blocks of Monday 2026-11-09, deploys the oracle with the mainnet parameters, and reads the real Chainlink prints. GOOGL prints 410 s apart compare at 28 bps (the 24/7 price 0.29% above the 24/5 price); TSLA at 356 s compares too; GOOGL at 3,942 s and TSLA at 4,769 s apart are reported as lag, not disagreement, with both verdicts still FRESH. Each test first asserts that the chain holds the same print times the poller recorded. It is four blocks of one day, not a distribution, but the mechanism now ran on real data.
+
+### 17. A close offset I inferred needs a way back
+The weekly window's open offset was measured once (Monday 01:00 UTC); the close offset (Saturday 01:00 UTC) is inferred, since quiet feeds cannot show a close. It is reconfigurable by the recorder with `setWindow`, and `make fork-setwindow` proves it on the fork: a deliberately wrong close turns the real oracle's verdict to CLOSED, correcting it turns it back to FRESH, no redeploy. A mistake in the window would still produce wrong verdicts until the recorder notices, so the first Friday close after deployment is the real test.
+
 ## Limits I know about
 - **Caps are an upper bound for a pool state, not a promise.** Depth moved between blocks. The sweep is a single block per sample, buy direction only, and ignores the dynamic fee and the MEV-tax module on these pools.
 - **The unit of `effectiveAt` is assumed, not observed.** Seconds is what the documentation says. It is mitigated by the value check but not verified live.
 - **The silence threshold is a bound, not a percentile** (item 13), and the comparison window, heartbeat margin and multiplier window are chosen values, not fitted ones. They are marked as such in `deploy/mainnet.params.env`.
 - **The size cap is only as good as its sample.** Several tokens sit at the sweep ceiling of $50,000, which is where measurement stopped, not a limit I measured.
 - **The weekend gap ledger needs a real weekend.** A fork produces no new prints, so the ledger is empty until mainnet has a reopen.
-- **Two divergence states have only been tested with mocks.** `COMPARED` and `PRINTS_TOO_FAR_APART` wait on a fixture from real prints.
 - **Slippage is checked on the whole batch, not per swap.** A bad single leg inside a good batch can hide under the batch tolerance.
 - **The Base block gas limit was not checked.** A 10-leg batch measured 4.86 million gas on the fork, and I make no claim about headroom.
 - **The contracts are not audited.**
@@ -66,5 +74,5 @@ A local fork of Base is pinned at a session block, with the whole system deploye
 
 ## Still to do
 - The close-of-week offset is inferred (Friday 20:00 ET), not measured; the open offset was measured once, in winter time.
-- The real-print fixture for the divergence states, from the Monday prints now in `data/`.
+- A scheduled check of the calendar horizon, due early December (item 15). `scripts/check_calendar_horizon.sh` exists; running it on a schedule does not yet.
 - Deploy, on-chain verification, and the first week of public data.

@@ -36,4 +36,4 @@ After a closure the held print is not only old. News over the weekend (an earnin
 The feed exposes only its latest round. The recorded reopen print is the latest at observation time, so the quality of a `GapRecord` depends on how soon after the reopen `snapshot` is called. `observedAtMs` has 200 ms resolution and describes the observation, not the feed print, which has one-second resolution.
 
 ## Open test debt
-`printLagSecs` and `PRINTS_TOO_FAR_APART` are tested only with mocks. Before `PRINTS_TOO_FAR_APART` is used as evidence, add a fixture test from the real sequence (AAPL print 19:58 UTC, NVDA print 21:39 UTC on 2026-11-06) and the Monday prints from `data/feed_samples*.csv`.
+`printLagSecs`, `COMPARED` and `PRINTS_TOO_FAR_APART` are also tested against real prints: `test/SessionOracle.realprints.fork.t.sol` (four blocks of Monday 2026-11-09). One day is not a distribution.

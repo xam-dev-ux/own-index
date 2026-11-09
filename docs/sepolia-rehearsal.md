@@ -17,7 +17,7 @@ Not covered here: DivergenceStatus COMPARED (it needs both feeds registered for 
 3. The rehearsal is not done at broadcast. The verdict checks inside the script run against simulated state. Run `python3 -I scripts/check_rehearsal.py broadcast/RehearseSepolia.s.sol/84532/run-latest.json` to read the nine verdicts from the deployed contracts on Sepolia. It prints ALL MATCH or DIVERGENCE. Only ALL MATCH completes the rehearsal. The checker itself was exercised end to end on a local fork of Sepolia with real broadcast transactions (not on Sepolia).
 
 ## Known gap: one debt, not two
-`DivergenceStatus.COMPARED` and `PRINTS_TOO_FAR_APART` are not exercised with real data. Both are settled by the same fixture: the real print sequence (AAPL 19:58 UTC and NVDA 21:39 UTC on 2026-11-06, plus the Monday prints from the poller CSVs). A second Sepolia run built from mocks would prove nothing the unit tests do not already prove. Until that fixture exists, neither status is eligibility evidence.
+`DivergenceStatus.COMPARED` and `PRINTS_TOO_FAR_APART` were not exercised with real data in this rehearsal; they now are, on a mainnet fork (test/SessionOracle.realprints.fork.t.sol). Both are settled by the same fixture: the real print sequence (AAPL 19:58 UTC and NVDA 21:39 UTC on 2026-11-06, plus the Monday prints from the poller CSVs). A second Sepolia run built from mocks would prove nothing the unit tests do not already prove. Until that fixture exists, neither status is eligibility evidence.
 
 ## Result: 2026-11-07, Base Sepolia (chain 84532), blocks 55808109 to 55808124
 Broadcast with `--account speedrun`; all transactions succeeded; total paid 0.000073 ETH.

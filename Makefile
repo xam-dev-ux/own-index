@@ -8,12 +8,12 @@ FORGE ?= base-forge
 CAST ?= base-cast
 FORK_BLOCK ?= 54457318
 LOCAL_SUITES := BaseTimeLibTest CalldataSuffixTest SessionOracleTest IndexVaultTest SlipstreamAdapterTest
-FORK_SUITES := SessionOracleForkTest IndexVaultForkTest IndexVaultSlipstreamForkTest
+FORK_SUITES := SessionOracleRealPrintsForkTest SessionOracleForkTest IndexVaultForkTest IndexVaultSlipstreamForkTest
 ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia rehearse-vault-dry rehearse-vault-sepolia check-vault-rehearsal deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend fork-states
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia rehearse-vault-dry rehearse-vault-sepolia check-vault-rehearsal deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend fork-states fork-setwindow
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -80,3 +80,7 @@ fork-weekend:
 # Stages that make the real oracle classify PAUSED, FAULT and AWAITING_FIRST_PRINT on the fork. Usage: make fork-states STAGE=pause|stale|reopen
 fork-states:
 	@scripts/fork_states.sh $(STAGE)
+
+# Proves a wrong weekly window can be corrected live by the recorder (setWindow). Does not move time.
+fork-setwindow:
+	@scripts/fork_setwindow.sh
