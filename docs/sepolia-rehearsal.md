@@ -32,3 +32,27 @@ Broadcast with `--account speedrun`; all transactions succeeded; total paid 0.00
 These addresses equal those of the earlier local-fork run because a contract address depends only on the deployer and its nonce; they were not reused from that run.
 
 Parameters in these deployments are disposable. Do not carry any of them to mainnet.
+
+## Second rehearsal: the vault side
+`script/RehearseSepoliaVault.s.sol` deploys what the first one did not: a mock USDC and four mock stocks with mock feeds, a `SessionOracle`, a mock Slipstream router, the real `SlipstreamAdapter`, the real `IndexVaultFactory`, and two vaults. Vault 1 is funded through the adapter, then records two refusals on chain (NO_DRIFT, and FEED_FAULT after one feed is made silent). Vault 2 deposits and withdraws everything in kind.
+
+What it proves: the deployment order and constructors of adapter and factory, the clone creation, the vault flow through the adapter's calldata, `tryRebalance` recording refusals, and the unconditional withdrawal. What it cannot prove: real pools, price impact, real feeds, real caps. The mock router swaps 1:1 in raw units, which at the $100 mock price equals the oracle price. All numbers are disposable.
+
+1. `make rehearse-vault-dry` simulates against a Sepolia fork. No password. Estimated cost 0.00024 ETH.
+2. `make rehearse-vault-sepolia` broadcasts and prompts for the keystore password.
+3. `make check-vault-rehearsal ORACLE=0x.. FACTORY=0x.. VAULT=0x.. VAULT_OUT=0x..` reads the chain, read-only, with no keystore. Only ALL MATCH completes the rehearsal. The component prints stay FRESH for about 12 hours, so run the check the same day.
+
+Exercised before any real broadcast: simulation passes, and a broadcast on a local fork of Sepolia followed by the checker returned ALL MATCH.
+
+### Result: 2026-11-09, Base Sepolia (chain 84532), block 56234176 and following
+Broadcast with `--account speedrun`; every transaction succeeded; total paid 0.000098 ETH. `make check-vault-rehearsal` read the chain and printed ALL MATCH (24 checks).
+
+| Contract | Address |
+|---|---|
+| SessionOracle | 0x49A3c2D794bE882D8f3feA97d45453cB8d20Bf07 |
+| SlipstreamAdapter (over a mock router) | 0xF3c10D18237454D248f1ef9f66Ae70E4b4bfA53b |
+| IndexVaultFactory | 0xb7E7bfA005c44922B8AA4073ff0428C1a0e53c25 |
+| Vault 1 (funded, two refusals recorded) | 0xBdCac0C7a5178990Ac8B617AdC7fe3F884f133D4 |
+| Vault 2 (deposited, withdrawn in kind) | 0xf946F61aa5edB9F3ab3759f2a9F15dC22277f88d |
+
+These addresses equal those of the earlier local run on a fork of Sepolia: a contract address depends only on the deployer and its nonce, and the fork had the same state. Parameters are disposable. The mock feeds stay FRESH about 12 hours, so the checker is only meaningful the same day.

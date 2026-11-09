@@ -13,7 +13,7 @@ ACCOUNT := speedrun
 SEPOLIA_RPC ?= https://sepolia.base.org
 MAINNET_RPC ?= https://mainnet.base.org
 
-.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend fork-states
+.PHONY: check-keystore check-suites test test-fork rehearse-dry rehearse-sepolia rehearse-vault-dry rehearse-vault-sepolia check-vault-rehearsal deploy-mainnet-dry deploy-mainnet verify-mainnet setup-fork stop-fork fork-weekend fork-states
 
 check-keystore:
 	@$(CAST) wallet list | grep -q "^$(ACCOUNT)" || (echo "keystore $(ACCOUNT) not found" && exit 1)
@@ -36,6 +36,17 @@ rehearse-dry:
 # Sepolia only, disposable parameters. Prompts for the keystore password.
 rehearse-sepolia: check-keystore
 	$(FORGE) script script/RehearseSepolia.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast
+
+# Second rehearsal (vault side: adapter, factory, vaults, on-chain refusals, withdrawal). Mocks only, disposable.
+rehearse-vault-dry:
+	$(FORGE) script script/RehearseSepoliaVault.s.sol --fork-url $(SEPOLIA_RPC)
+
+rehearse-vault-sepolia: check-keystore
+	$(FORGE) script script/RehearseSepoliaVault.s.sol --rpc-url $(SEPOLIA_RPC) --account $(ACCOUNT) --broadcast
+
+# Read-only, against the chain. Needs ORACLE FACTORY VAULT VAULT_OUT from the rehearsal output.
+check-vault-rehearsal:
+	ORACLE=$(ORACLE) FACTORY=$(FACTORY) VAULT=$(VAULT) VAULT_OUT=$(VAULT_OUT) $(FORGE) script script/CheckRehearsalVault.s.sol --rpc-url $(SEPOLIA_RPC)
 
 PARAMS ?= deploy/mainnet.params.env
 RUN_PARAMS = set -a; . $(PARAMS); set +a;
