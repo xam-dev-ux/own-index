@@ -1,0 +1,9 @@
+{
+  "chainId": 8453,
+  "rpc": "https://mainnet.base.org",
+  "forkBlock": 55289704,
+  "oracle": "0x516A9C36E0D3f49Ed51E93cDa7B236D5A7a89951",
+  "adapter": "0x6d6C9449862B0188c746e029069C05b1B59c7c04",
+  "factory": "0xf41FA301b6B7A487f83C3fadaeD4DEC097d9d42a",
+  "usdc": "0x833589fCD6eDb6E08f4c7C32D4f71b54bdA02913"
+}

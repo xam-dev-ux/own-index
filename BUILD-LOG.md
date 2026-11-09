@@ -59,6 +59,9 @@ A live Monday-session sweep (18:04 UTC) showed INTC and CRCL usable: 37 bps and 
 ### 17. A close offset I inferred needs a way back
 The weekly window's open offset was measured once (Monday 01:00 UTC); the close offset (Saturday 01:00 UTC) is inferred, since quiet feeds cannot show a close. It is reconfigurable by the recorder with `setWindow`, and `make fork-setwindow` proves it on the fork: a deliberately wrong close turns the real oracle's verdict to CLOSED, correcting it turns it back to FRESH, no redeploy. A mistake in the window would still produce wrong verdicts until the recorder notices, so the first Friday close after deployment is the real test.
 
+### 18. Deployed, and read back from the chain
+The three contracts went to Base mainnet on 2026-11-09 (blocks 55289704 to 55289762, 0.000058 ETH). `make verify-mainnet` read them from the chain, not from the deployment script, and matched every check; the dry run's addresses were identical because an address depends only on the deployer and its nonce. The interface, built against those addresses, read the real oracle: all ten tokens FRESH during the Monday session, the 24/7 feeds shown as "not comparable new" for their first hour. A fault shown on screen would have been a real one.
+
 ## Limits I know about
 - **Caps are an upper bound for a pool state, not a promise.** Depth moved between blocks. The sweep is a single block per sample, buy direction only, and ignores the dynamic fee and the MEV-tax module on these pools.
 - **The unit of `effectiveAt` is assumed, not observed.** Seconds is what the documentation says. It is mitigated by the value check but not verified live.
@@ -75,4 +78,4 @@ A local fork of Base is pinned at a session block, with the whole system deploye
 ## Still to do
 - The close-of-week offset is inferred (Friday 20:00 ET), not measured; the open offset was measured once, in winter time.
 - A scheduled check of the calendar horizon, due early December (item 15). `scripts/check_calendar_horizon.sh` exists; running it on a schedule does not yet.
-- Deploy, on-chain verification, and the first week of public data.
+- The first week of public data, BaseScan source verification, the first real weekend in the gap ledger, and the scheduled calendar check.

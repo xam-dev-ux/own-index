@@ -5,7 +5,13 @@ Two contracts for tokenized stocks on Base.
 - **WeekendMark** (`SessionOracle`) turns a Chainlink equity feed into a *verdict*: is this price usable right now, and if not, why? It tells a closed market (a weekend, a holiday, an early close) apart from a feed that has gone quiet while it should be updating. It also keeps a public ledger of how far each price moved across every closure.
 - **Own Index** is a factory of self-custodial index vaults. You choose the components and weights. The vault refuses to trade against any price that is not fresh, and says exactly why.
 
-Status: the contracts and the web app are built and tested, on ten tokenized equities (AAPL, AMZN, GOOGL, META, MSFT, MSTR, NVDA, SNDK, SPCX, TSLA). **Nothing is deployed to mainnet yet.** See [BUILD-LOG.md](BUILD-LOG.md) for what is pending and what the design had to react to.
+Status: the contracts and the web app are built and tested, on ten tokenized equities (AAPL, AMZN, GOOGL, META, MSFT, MSTR, NVDA, SNDK, SPCX, TSLA). **Deployed on Base mainnet on 2026-11-09**, and `make verify-mainnet` read the chain and matched every check. See [BUILD-LOG.md](BUILD-LOG.md) for what the design had to react to and what is still pending.
+
+| Contract | Base mainnet |
+|---|---|
+| `SessionOracle` (WeekendMark) | [0x516A9C36E0D3f49Ed51E93cDa7B236D5A7a89951](https://basescan.org/address/0x516A9C36E0D3f49Ed51E93cDa7B236D5A7a89951) |
+| `SlipstreamAdapter` | [0x6d6C9449862B0188c746e029069C05b1B59c7c04](https://basescan.org/address/0x6d6C9449862B0188c746e029069C05b1B59c7c04) |
+| `IndexVaultFactory` | [0xf41FA301b6B7A487f83C3fadaeD4DEC097d9d42a](https://basescan.org/address/0xf41FA301b6B7A487f83C3fadaeD4DEC097d9d42a) |
 
 ## What it is not
 - It is not a fund. There is no pooled token, share or NAV, and nobody manages anything for you.

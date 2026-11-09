@@ -6,6 +6,7 @@
   "scripts": {
     "predev": "node scripts/copy-addresses.mjs",
     "dev": "vite",
+    "prebuild": "node scripts/copy-addresses.mjs mainnet",
     "build": "tsc --noEmit && vite build",
     "typecheck": "tsc --noEmit"
   },
