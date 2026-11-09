@@ -28,9 +28,11 @@ function useSender() {
   async function send(label: string, params: Parameters<typeof writeContractAsync>[0]) {
     setBusy(true); setMsg(null);
     try {
-      // The estimate is too tight for a batch of nested swaps (it ran out of gas on a fork), so send with 30% headroom.
+      // The estimate is too tight for swaps through these pools. A deposit that used 574k gas reverted with the limit at 870k and
+      // succeeded at 875k (the pool hook refuses to finish a swap with too little gas left), so the limit is the estimate plus 30%
+      // plus a fixed 400k. Unused gas is refunded; the only cost is a higher maximum fee shown by the wallet.
       const est = await client!.estimateContractGas({ ...params, account: account! } as never);
-      const hash = await writeContractAsync({ ...params, gas: (est * 13n) / 10n, ...(BUILDER_SUFFIX ? { dataSuffix: BUILDER_SUFFIX } : {}) } as never);
+      const hash = await writeContractAsync({ ...params, gas: (est * 13n) / 10n + 400_000n, ...(BUILDER_SUFFIX ? { dataSuffix: BUILDER_SUFFIX } : {}) } as never);
       const rc = await client!.waitForTransactionReceipt({ hash });
       await qc.invalidateQueries();
       setMsg(rc.status === "success" ? { ok: true, text: `${label}: done (${hash.slice(0, 10)}…)` } : { ok: false, text: `${label}: transaction reverted` });
