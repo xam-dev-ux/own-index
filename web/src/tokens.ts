@@ -1,4 +1,4 @@
-// The twelve tokenized equities the oracle is configured for (same list as script/MainnetConfig.sol).
+// The ten tokenized equities the oracle is configured for (same list as script/MainnetConfig.sol).
 export const TOKENS = [
   { symbol: "AAPL", address: "0xb200000000000000000000C2e324d24d7eEcd1fb" },
   { symbol: "AMZN", address: "0xb200000000000000000000d9192b6B456483C2E8" },
@@ -10,6 +10,4 @@ export const TOKENS = [
   { symbol: "SNDK", address: "0xb200000000000000000000397293Cb8cda9a10c5" },
   { symbol: "SPCX", address: "0xb2000000000000000000007b9fcbd005511aCBd5" },
   { symbol: "TSLA", address: "0xb2000000000000000000001e800a7f5189430cD0" },
-  { symbol: "INTC", address: "0xB2000000000000000000004AFF16039bA04bdFBc" },
-  { symbol: "CRCL", address: "0xB20000000000000000000019f6E7C675b73C2e4D" },
 ] as const satisfies readonly { symbol: string; address: `0x${string}` }[];

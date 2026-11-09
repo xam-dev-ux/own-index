@@ -30,21 +30,24 @@ abstract contract MainnetConfig is Script {
         uint256 cap;           // USDC units, docs/vault-design.md
     }
 
-    function _universe() internal pure returns (Stock[12] memory s) {
-        // caps: INTC 5,000 and CRCL 10,000 from data/impact_sweep.csv (50 bps criterion); the others are the sweep
-        // ceiling of 50,000, which is where measurement stopped, not a measured limit.
+    /// Number of tokens in the index. INTC and CRCL were dropped (docs/liquidity-in-session.md): their pools were unusable
+    /// at two of three in-session blocks, and the rule is the minimum over session blocks.
+    uint256 internal constant N = 10;
+
+    function _universe() internal pure returns (Stock[10] memory s) {
+        // caps: the largest swept size with at most 50 bps of impact, taken as the MINIMUM over the three in-session blocks
+        // in data/impact_sweep_session.csv (never the Saturday block). A cap of 50,000 is the sweep ceiling, which is
+        // where measurement stopped, not a measured limit.
         s[0] = Stock("AAPL", 0xb200000000000000000000C2e324d24d7eEcd1fb, 0x787f13dEa48Db0897CbCDD985de77809D837F988, address(0), "", 0xF5FCB9CDAFcE67d50AfEf298F88E709d2B946BA6, 50_000e6);
         s[1] = Stock("AMZN", 0xb200000000000000000000d9192b6B456483C2E8, 0x06A8E4b3aBB3B7543d8396FB2B763d22820cB295, address(0), "", 0x532e0F46d1e528507FC9454d5847C231f23bDDf6, 50_000e6);
         s[2] = Stock("GOOGL", 0xb2000000000000000000002D0BA3164cc74f58B7, 0x5bF49E0ffA937CE2FfF033c739aD7C634c4D34F2, 0xdD9b9EC942477AA672a15adF91AC5089BD86cD85, "Coinbase GOOGL (24/7)", 0x16c70F04C3080a127486Cdf5a4C33c066bBF47C3, 50_000e6);
         s[3] = Stock("META", 0xb2000000000000000000008bC8786B856E61707C, 0x6526aE6797A76123638b863AeE4dD27Ba4E4b27D, address(0), "", 0xd072410fa13D242e1d53721Bcf7AF02e3455DC96, 50_000e6);
-        s[4] = Stock("MSFT", 0xB200000000000000000000Ab99cFa739E253872B, 0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c, address(0), "", 0x2740C0faAb738F6e346e545fDE02aEF9B1A01ee7, 50_000e6);
+        s[4] = Stock("MSFT", 0xB200000000000000000000Ab99cFa739E253872B, 0xeB10A6c9aa7E537aEd766C08c35Dae35B321b18c, address(0), "", 0x2740C0faAb738F6e346e545fDE02aEF9B1A01ee7, 20_000e6);
         s[5] = Stock("MSTR", 0xb2000000000000000000004884b426556b92883d, 0xB3cE282CD188b35DA0E38D8Bc7d58e33173D202a, address(0), "", 0x66DCd42E6314B287110922AE36cB2a8bdEECc153, 50_000e6);
-        s[6] = Stock("NVDA", 0xb20000000000000000000078ee7ce2fE4908108C, 0x04689a41629776563E6822F76f2e57D148d28513, 0x48D9731AF6cc55b879FE76a4Bd1A6c2C0bDaf944, "Coinbase NVDA (24/7)", 0xF668e21993f0ACd7ab00BB1cFbAeD0df28A3C8EC, 50_000e6);
-        s[7] = Stock("SNDK", 0xb200000000000000000000397293Cb8cda9a10c5, 0x388b0dC46C0Fb05A74BeE0994fa5b02c6Fcca2eA, address(0), "", 0x2836e062a3fe75943a7F4A552E2365b98E414E75, 50_000e6);
-        s[8] = Stock("SPCX", 0xb2000000000000000000007b9fcbd005511aCBd5, 0x6A634B235903C4ad6376892180d6fF8612e3Fa68, address(0), "", 0x880dB7Dda4407D99508574E680d067D1164B3cFE, 50_000e6);
-        s[9] = Stock("TSLA", 0xb2000000000000000000001e800a7f5189430cD0, 0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4, 0xa5Ccd0315346b9A8A1D0AFEcD7Cc4e820e405e96, "Coinbase TSLA (24/7)", 0x7A33000372f3F028f074182CCb9d16cBEEfBF920, 50_000e6);
-        s[10] = Stock("INTC", 0xB2000000000000000000004AFF16039bA04bdFBc, 0xAB657C39bac0D5886250D70849e2E3E008F2EECB, address(0), "", 0x3D384288fA79B51De882B06B617aB7989CcAd4f3, 5_000e6);
-        s[11] = Stock("CRCL", 0xB20000000000000000000019f6E7C675b73C2e4D, 0x0231cF2635D1E17bB5c2462cc7504Ba1fBd61f33, address(0), "", 0x294666AD6a415E8C33Af801225c04079BB4f1133, 10_000e6);
+        s[6] = Stock("NVDA", 0xb20000000000000000000078ee7ce2fE4908108C, 0x04689a41629776563E6822F76f2e57D148d28513, 0x48D9731AF6cc55b879FE76a4Bd1A6c2C0bDaf944, "Coinbase NVDA (24/7)", 0xF668e21993f0ACd7ab00BB1cFbAeD0df28A3C8EC, 30_000e6);
+        s[7] = Stock("SNDK", 0xb200000000000000000000397293Cb8cda9a10c5, 0x388b0dC46C0Fb05A74BeE0994fa5b02c6Fcca2eA, address(0), "", 0x2836e062a3fe75943a7F4A552E2365b98E414E75, 30_000e6);
+        s[8] = Stock("SPCX", 0xb2000000000000000000007b9fcbd005511aCBd5, 0x6A634B235903C4ad6376892180d6fF8612e3Fa68, address(0), "", 0x880dB7Dda4407D99508574E680d067D1164B3cFE, 30_000e6);
+        s[9] = Stock("TSLA", 0xb2000000000000000000001e800a7f5189430cD0, 0xFaf869185383a24F8cb00e27BdA6b63B9905DCb4, 0xa5Ccd0315346b9A8A1D0AFEcD7Cc4e820e405e96, "Coinbase TSLA (24/7)", 0x7A33000372f3F028f074182CCb9d16cBEEfBF920, 7_500e6);
     }
 
     struct OracleParams {
@@ -55,7 +58,7 @@ abstract contract MainnetConfig is Script {
         uint32 comparisonWindow;
         uint64 confirmedUntil;
         uint32 multiplierWindow;
-        uint32[12] thresholds;
+        uint32[10] thresholds;
         uint64[] closureStart;
         uint64[] closureEnd;
         uint8[] closureKind; // 0 HOLIDAY, 1 EARLY_CLOSE
@@ -90,7 +93,7 @@ abstract contract MainnetConfig is Script {
         return false;
     }
 
-    function _params(Stock[12] memory u) internal view returns (OracleParams memory p) {
+    function _params(Stock[10] memory u) internal view returns (OracleParams memory p) {
         p.openOffset = uint32(_u("ORACLE_OPEN_OFFSET"));
         p.closeOffset = uint32(_u("ORACLE_CLOSE_OFFSET"));
         p.heartbeat = uint32(_u("ORACLE_HEARTBEAT"));
@@ -98,7 +101,7 @@ abstract contract MainnetConfig is Script {
         p.comparisonWindow = uint32(_u("ORACLE_COMPARISON_WINDOW"));
         p.confirmedUntil = uint64(_u("CALENDAR_CONFIRMED_UNTIL"));
         p.multiplierWindow = uint32(_u("MULTIPLIER_WINDOW_SECS"));
-        for (uint256 i; i < 12; ++i) p.thresholds[i] = uint32(_u(string.concat("THRESHOLD_", u[i].symbol)));
+        for (uint256 i; i < N; ++i) p.thresholds[i] = uint32(_u(string.concat("THRESHOLD_", u[i].symbol)));
         uint256 n = _u("CLOSURE_COUNT");
         p.closureStart = new uint64[](n);
         p.closureEnd = new uint64[](n);
@@ -118,7 +121,7 @@ abstract contract MainnetConfig is Script {
         require(p.openOffset < p.closeOffset && p.closeOffset <= 7 days, "window offsets");
         require(p.heartbeat == 86400, "heartbeat is the feeds' 24h");
         require(p.comparisonWindow > 0 && p.multiplierWindow > 0, "windows must be positive");
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < N; ++i) {
             require(p.thresholds[i] > 0 && p.thresholds[i] < p.heartbeat, "threshold out of range");
         }
         require(p.confirmedUntil >= CALENDAR_MUST_REACH, "calendar must be confirmed past 2026-11-27");

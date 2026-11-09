@@ -19,7 +19,7 @@ interface IB20 {
 /// @notice Mainnet fork. B20 tokens are precompiles and run natively under base-forge, so these reads hit the real
 /// implementation. Verifies the multiplier model IndexVault is built on, at the pinned block.
 contract IndexVaultForkTest is Test {
-    string[12] internal ADDR = [
+    string[10] internal ADDR = [
         "0xb200000000000000000000C2e324d24d7eEcd1fb", // AAPL
         "0xb200000000000000000000d9192b6B456483C2E8", // AMZN
         "0xb2000000000000000000002D0BA3164cc74f58B7", // GOOGL
@@ -29,9 +29,7 @@ contract IndexVaultForkTest is Test {
         "0xb20000000000000000000078ee7ce2fE4908108C", // NVDA
         "0xb200000000000000000000397293Cb8cda9a10c5", // SNDK
         "0xb2000000000000000000007b9fcbd005511aCBd5", // SPCX
-        "0xb2000000000000000000001e800a7f5189430cD0", // TSLA
-        "0xB2000000000000000000004AFF16039bA04bdFBc", // INTC
-        "0xB20000000000000000000019f6E7C675b73C2e4D"  // CRCL
+        "0xb2000000000000000000001e800a7f5189430cD0"  // TSLA
     ];
 
     function setUp() public {
@@ -43,7 +41,7 @@ contract IndexVaultForkTest is Test {
     }
 
     function test_multiplier_model_matches_live_b20() public view {
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < 10; ++i) {
             IB20 t = IB20(_tok(i));
             uint256 m = t.uiMultiplier();
             uint256 pendingAt = t.effectiveAt();

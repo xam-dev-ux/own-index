@@ -12,7 +12,7 @@ interface IERC20Min {
     function balanceOf(address) external view returns (uint256);
 }
 
-/// @notice LOCAL FORK ONLY (scripts/setup_fork.sh). Creates a vault with 11 of the 12 components, deposits through the
+/// @notice LOCAL FORK ONLY (scripts/setup_fork.sh). Creates a vault with all 10 components, deposits through the
 /// real Slipstream pools and records one real refusal (NO_DRIFT) so a UI has live state to read.
 /// Owner is anvil's first dev account (public, worthless on a real chain). Refuses to run anywhere but a fork
 /// whose chain id is 8453 AND whose factory is the one passed in the environment.
@@ -22,16 +22,14 @@ contract SetupForkVault is MainnetConfig {
     function run() external {
         require(block.chainid == 8453, "fork only");
         IndexVaultFactory f = IndexVaultFactory(vm.envAddress("FACTORY_ADDRESS"));
-        Stock[12] memory u = _universe();
+        Stock[10] memory u = _universe();
 
-        // 11 components, CRCL left out: at the pinned session block its pool holds ~no depth (800 USDC buys 0.0066 CRCL),
-        // so the vault correctly refuses to trade it. See docs/fork-dev.md.
-        uint256 n = 11;
+        uint256 n = N;
         IIndexVault.Component[] memory comps = new IIndexVault.Component[](n);
         bytes[] memory legs = new bytes[](n);
         uint16 left = 10_000;
         for (uint256 i; i < n; ++i) {
-            uint16 w = i == n - 1 ? left : 909;
+            uint16 w = i == n - 1 ? left : 1000;
             left -= w;
             comps[i] = IIndexVault.Component(u[i].token, w);
             legs[i] = abi.encodeCall(SlipstreamAdapter.buy, (u[i].token, 800e6, 0));
@@ -41,8 +39,8 @@ contract SetupForkVault is MainnetConfig {
         IIndexVault v = IIndexVault(f.createVault());
         v.setComponents(comps);
         v.setRules(IIndexVault.Rules({driftThresholdBps: 500, minRebalanceInterval: 0, maxSlippageBps: 200}));
-        IERC20Min(USDC).approve(address(v), 8_800e6);
-        v.deposit(8_800e6, legs);
+        IERC20Min(USDC).approve(address(v), 8_000e6);
+        v.deposit(8_000e6, legs);
         // Nothing has drifted yet: a real, recorded refusal while the market is open.
         bool executed = v.tryRebalance(new bytes[](0));
         vm.stopBroadcast();

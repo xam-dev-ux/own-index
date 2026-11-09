@@ -23,7 +23,7 @@ import {ISessionOracle} from "../src/ISessionOracle.sol";
 /// `setComponents`, so there is no global "initial observation" to perform at deploy time.
 contract DeployMainnet is MainnetConfig {
     function run() external {
-        Stock[12] memory u = _universe();
+        Stock[10] memory u = _universe();
         OracleParams memory p = _params(u); // reverts on any placeholder
 
         vm.startBroadcast(DEPLOYER);
@@ -33,7 +33,7 @@ contract DeployMainnet is MainnetConfig {
             DEPLOYER, p.openOffset, p.closeOffset, p.heartbeat, p.heartbeatMargin, p.comparisonWindow
         );
         oracle.setRegistry(REGISTRY);
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < N; ++i) {
             oracle.configureToken(u[i].token, u[i].feed, u[i].secondaryFeed, p.thresholds[i]);
         }
         for (uint256 i; i < p.closureStart.length; ++i) {
@@ -42,10 +42,10 @@ contract DeployMainnet is MainnetConfig {
         oracle.confirmCalendarUntil(p.confirmedUntil);
 
         // 2. adapter over the measured pools (its constructor refuses any other pool)
-        address[] memory toks = new address[](12);
-        address[] memory pools = new address[](12);
-        uint256[] memory caps = new uint256[](12);
-        for (uint256 i; i < 12; ++i) {
+        address[] memory toks = new address[](N);
+        address[] memory pools = new address[](N);
+        uint256[] memory caps = new uint256[](N);
+        for (uint256 i; i < N; ++i) {
             toks[i] = u[i].token;
             pools[i] = u[i].pool;
             caps[i] = u[i].cap;
@@ -59,7 +59,7 @@ contract DeployMainnet is MainnetConfig {
         vm.stopBroadcast();
 
         // Simulation-side sanity (the real check is verify-mainnet against the chain)
-        require(oracle.tokenCount() == 12 && oracle.closureCount() == p.closureStart.length, "sim: oracle state");
+        require(oracle.tokenCount() == N && oracle.closureCount() == p.closureStart.length, "sim: oracle state");
         require(oracle.confirmedUntil() == p.confirmedUntil, "sim: calendar not confirmed");
 
         console.log("SessionOracle       ", address(oracle));

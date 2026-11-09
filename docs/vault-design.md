@@ -37,13 +37,12 @@ Calibration versus safety: the oracle threshold is a calibration (statistical, i
 **Assumed consequence, not a discovered limitation:** the cap reflects the liquidity at the factory's deployment. If liquidity of a pool changes materially, the remedy is a new factory and new vaults, not an adjustment.
 
 ### How the numbers are derived
-Criterion (stated before reading the result): the largest swept size whose *real* swap price impact, fee excluded, is at most 50 bps, which is half the 100 bps eligibility gate. Data: `data/impact_sweep.csv`, produced by `docs/fork-check/ImpactSweep.t.sol`, real `pool.swap` on a fork pinned at block 54457318, sizes $500 to $50,000. The sweep ceiling is $50,000; a token that never reaches 50 bps by then gets the ceiling. **For those ten, $50,000 is where the measurement stopped, not a measured safe limit of the pool.** Nothing above $50,000 was measured because nothing needed it.
+Criterion (stated before reading the result): the largest swept size whose *real* swap price impact, fee excluded, is at most 50 bps, which is half the 100 bps eligibility gate. **This section describes the first, Saturday-block derivation, which docs/liquidity-in-session.md supersedes.** Data: `data/impact_sweep.csv`, produced by `docs/fork-check/ImpactSweep.t.sol`, real `pool.swap` on a fork pinned at block 54457318, sizes $500 to $50,000. The sweep ceiling is $50,000; a token that never reaches 50 bps by then gets the ceiling. **For those ten, $50,000 is where the measurement stopped, not a measured safe limit of the pool.** Nothing above $50,000 was measured because nothing needed it.
 
 | Token | Real impact at largest size still under the criterion | Cap (USDC) |
 |---|---|---|
-| INTC | 46.3 bps at $5,000 ($7,500 gives 62.6) | 5,000 |
-| CRCL | 48.2 bps at $10,000 ($15,000 gives 58.9) | 10,000 |
-| the other ten | under 6 bps at $50,000 (largest MSTR 5.6) | 50,000 |
+| INTC, CRCL | (superseded) | removed from the index, see docs/liquidity-in-session.md |
+| the other ten | under 6 bps at $50,000 (largest MSTR 5.6) at this Saturday block | **superseded by the in-session minimum**: MSFT 20,000, NVDA/SNDK/SPCX 30,000, TSLA 7,500, others 50,000 |
 
 The pools use a **dynamic fee** and an MEV tax module. These caps were measured at the fee of block 54457318 and may move; the effect of the MEV tax on a swap sent with a high priority fee is **unknown**, not assumed zero.
 
@@ -96,9 +95,9 @@ Router `0x9Ee35Bf1bd69a03c6F0393582030fCe8Bb93D418`, from Aero's own deployment 
 
 Checked at the pinned fork block (`test/IndexVault.slipstream.fork.t.sol`):
 - `router.factory()` equals the factory the liquidity was measured on.
-- For all 12 tokens, `getPool(USDC, token, 10)` returns exactly the pool in `data/impact.json`.
-- A 12-leg `exactInputSingle` basket through the vault sends USDC into those pools (each pool's USDC balance rises by at least 99% of the leg) and the vault ends holding the tokens. Value after buying with 9,600 USDC: 9,596.58 USDC, 3.4 bps below what was paid, inside the 100 bps rule.
-- A $6,000 INTC leg reverts with `ImpactCapExceeded` on the real router.
+- For all 10 tokens, `getPool(USDC, token, 10)` returns exactly the pool in `data/impact.json`.
+- A 10-leg `exactInputSingle` basket through the vault sends USDC into those pools (each pool's USDC balance rises by at least 99% of the leg) and the vault ends holding the tokens. Value after buying with 9,600 USDC: 9,596.58 USDC, 3.4 bps below what was paid, inside the 100 bps rule.
+- A $8,000 TSLA leg (cap 7,500) reverts with `ImpactCapExceeded` on the real router.
 
 **SlipstreamAdapter closes the route question structurally.** The factory's `router` is not the Aero router but `src/SlipstreamAdapter.sol`, which exposes only `buy(token, usdcIn, minOut)` and `sell(token, tokenIn, minOut)`: single hop, USDC against one listed token, tick spacing fixed at 10, output always sent to the caller. Its constructor takes the token and pool lists and reverts unless `getPool(USDC, token, 10)` equals the pool given, so it can only be built over the pools in `data/impact.json`. It has no owner, no setters, holds no funds and resets its approval. There is no multi-hop path and no other pair to reach, so the vault does not need to read calldata, and the cap for a token always refers to the pool the evidence was taken from. Tests: `test/SlipstreamAdapter.t.sol` (mock) and the fork suite (a multi-hop `exactInput` leg and an unlisted token both fail with `SwapFailed`; a sell round trip passes the same gated path).
 
@@ -107,9 +106,9 @@ What this does not cover: the adapter pins the *pool*, not the *price*. Value pr
 Not measured: the pools use a dynamic fee hook and an MEV tax module (both listed in the deployment file). The fee in `data/impact.json` is a snapshot; the effect of the MEV tax on a swap sent with a high priority fee is unknown.
 
 ### Gas (fork, pinned block, real router and pools)
-- Same 12 swaps sent straight to the router from an account: 4.09M.
-- Through vault and adapter, 12 legs / 12 components: 6.16M. Of the 2.07M over the baseline, the adapter's extra transfer and approve per leg and the vault's per-leg balance reads and approvals are both included; they were not separated. (Through the vault with the raw router, before the adapter existed: 5.45M.)
-- Worst case, 20 components and 20 legs (12 real pools, 8 repeated buys, 8 padding components with no pool): 8.21M. That is a single `deposit`. Base's current block gas limit was not checked here, so no claim is made about headroom beyond the measured figure.
+- Same 10 swaps sent straight to the router from an account: 3.15M (4.09M when there were 12).
+- Through vault and adapter, 10 legs / 10 components: 4.86M (6.16M when there were 12). Of the 2.07M over the baseline, the adapter's extra transfer and approve per leg and the vault's per-leg balance reads and approvals are both included; they were not separated. (Through the vault with the raw router, before the adapter existed: 5.45M.)
+- Worst case, 20 components and 20 legs (10 real pools, 10 padding components with no pool): 7.49M (8.21M with 12 real pools). That is a single `deposit`. Base's current block gas limit was not checked here, so no claim is made about headroom beyond the measured figure.
 
 ## Not decided here
 Whether to enforce single-hop tick-spacing-10 legs with an adapter, `multiplierWindowSecs`, and the sell-direction impact sweep.

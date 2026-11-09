@@ -19,7 +19,7 @@ interface IFeedMeta {
 /// Addresses come from ORACLE_ADDRESS, ADAPTER_ADDRESS, FACTORY_ADDRESS. A failed `require` fails the script.
 contract VerifyMainnet is MainnetConfig {
     function run() external view {
-        Stock[12] memory u = _universe();
+        Stock[10] memory u = _universe();
         OracleParams memory p = _params(u);
         SessionOracle o = SessionOracle(vm.envAddress("ORACLE_ADDRESS"));
         SlipstreamAdapter a = SlipstreamAdapter(vm.envAddress("ADAPTER_ADDRESS"));
@@ -32,13 +32,13 @@ contract VerifyMainnet is MainnetConfig {
         require(o.comparisonWindowSecs() == p.comparisonWindow, "oracle: comparison window");
         require(o.registry() == REGISTRY, "oracle: registry");
         require(o.confirmedUntil() == p.confirmedUntil, "oracle: calendar confirmation");
-        require(o.tokenCount() == 12, "oracle: token count");
+        require(o.tokenCount() == N, "oracle: token count");
         require(o.closureCount() == p.closureStart.length, "oracle: closure count");
         for (uint256 i; i < p.closureStart.length; ++i) {
             SessionOracle.Closure memory c = o.closureAt(i);
             require(c.start == p.closureStart[i] && c.end == p.closureEnd[i] && uint8(c.kind) == p.closureKind[i], "oracle: closure");
         }
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < N; ++i) {
             (address feed, address sec, uint32 thr,,, bool active) = o.configOf(u[i].token);
             require(active && feed == u[i].feed && sec == u[i].secondaryFeed && thr == p.thresholds[i], string.concat("oracle: config ", u[i].symbol));
             require(keccak256(bytes(IFeedMeta(feed).description())) == keccak256(bytes(string.concat("Coinbase ", u[i].symbol))), string.concat("oracle: feed description ", u[i].symbol));
@@ -54,15 +54,15 @@ contract VerifyMainnet is MainnetConfig {
 
         // --- adapter
         require(address(a.router()) == SLIPSTREAM_ROUTER && a.usdc() == USDC, "adapter: router/usdc");
-        require(a.listedTokens().length == 12, "adapter: listed");
-        for (uint256 i; i < 12; ++i) require(a.poolOf(u[i].token) == u[i].pool, string.concat("adapter: pool ", u[i].symbol));
+        require(a.listedTokens().length == N, "adapter: listed");
+        for (uint256 i; i < N; ++i) require(a.poolOf(u[i].token) == u[i].pool, string.concat("adapter: pool ", u[i].symbol));
 
         // --- factory
         require(address(f.oracle()) == address(o), "factory: oracle");
         require(f.usdc() == USDC && f.router() == address(a), "factory: usdc/router");
         require(f.multiplierWindowSecs() == p.multiplierWindow, "factory: multiplier window");
-        require(f.allowedTokens().length == 12, "factory: allowed");
-        for (uint256 i; i < 12; ++i) require(f.capOf(u[i].token) == u[i].cap, string.concat("factory: cap ", u[i].symbol));
+        require(f.allowedTokens().length == N, "factory: allowed");
+        for (uint256 i; i < N; ++i) require(f.capOf(u[i].token) == u[i].cap, string.concat("factory: cap ", u[i].symbol));
         require(f.implementation().code.length > 0, "factory: implementation");
         require(address(IndexVault(f.implementation()).factory()) == address(1), "factory: implementation must be locked");
         console.log("ALL ON-CHAIN CHECKS MATCHED");

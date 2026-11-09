@@ -44,7 +44,7 @@ contract IndexVaultSlipstreamForkTest is Test {
     address constant CL_FACTORY = 0x9CB220581b91b0C83223012FE69688b92aD07a76;
     int24 constant TS = 10;
 
-    string[12] internal ADDR = [
+    string[10] internal ADDR = [
         "0xb200000000000000000000C2e324d24d7eEcd1fb",
         "0xb200000000000000000000d9192b6B456483C2E8",
         "0xb2000000000000000000002D0BA3164cc74f58B7",
@@ -54,12 +54,10 @@ contract IndexVaultSlipstreamForkTest is Test {
         "0xb20000000000000000000078ee7ce2fE4908108C",
         "0xb200000000000000000000397293Cb8cda9a10c5",
         "0xb2000000000000000000007b9fcbd005511aCBd5",
-        "0xb2000000000000000000001e800a7f5189430cD0",
-        "0xB2000000000000000000004AFF16039bA04bdFBc", // INTC, index 10
-        "0xB20000000000000000000019f6E7C675b73C2e4D" // CRCL, index 11
+        "0xb2000000000000000000001e800a7f5189430cD0"
     ];
     // measured pools from data/impact.json, same order
-    string[12] internal POOL = [
+    string[10] internal POOL = [
         "0xF5FCB9CDAFcE67d50AfEf298F88E709d2B946BA6",
         "0x532e0F46d1e528507FC9454d5847C231f23bDDf6",
         "0x16c70F04C3080a127486Cdf5a4C33c066bBF47C3",
@@ -69,10 +67,10 @@ contract IndexVaultSlipstreamForkTest is Test {
         "0xF668e21993f0ACd7ab00BB1cFbAeD0df28A3C8EC",
         "0x2836e062a3fe75943a7F4A552E2365b98E414E75",
         "0x880dB7Dda4407D99508574E680d067D1164B3cFE",
-        "0x7A33000372f3F028f074182CCb9d16cBEEfBF920",
-        "0x3D384288fA79B51De882B06B617aB7989CcAd4f3",
-        "0x294666AD6a415E8C33Af801225c04079BB4f1133"
+        "0x7A33000372f3F028f074182CCb9d16cBEEfBF920"
     ];
+    // the caps in script/MainnetConfig.sol: minimum over the in-session blocks of data/impact_sweep_session.csv
+    uint256[10] internal CAP = [uint256(50_000e6), 50_000e6, 50_000e6, 50_000e6, 20_000e6, 50_000e6, 30_000e6, 30_000e6, 30_000e6, 7_500e6];
 
     MockOracle oracle;
     SlipstreamAdapter adapter;
@@ -83,15 +81,15 @@ contract IndexVaultSlipstreamForkTest is Test {
     function setUp() public {
         if (block.chainid != 8453) vm.skip(true);
         oracle = new MockOracle();
-        uint256 n = 12;
+        uint256 n = 10;
         address[] memory t = new address[](n);
         uint256[] memory caps = new uint256[](n);
         IIndexVault.Component[] memory c = new IIndexVault.Component[](n);
         for (uint256 i; i < n; ++i) {
             t[i] = vm.parseAddress(ADDR[i]);
             toks.push(t[i]);
-            caps[i] = i == 10 ? 5_000e6 : i == 11 ? 10_000e6 : 50_000e6; // docs/vault-design.md
-            c[i] = IIndexVault.Component(t[i], i < 8 ? 833 : 834);
+            caps[i] = CAP[i];
+            c[i] = IIndexVault.Component(t[i], 1000);
             oracle.fresh(t[i], int256(_spotPrice8(vm.parseAddress(POOL[i]))));
         }
         address[] memory pools = new address[](n);
@@ -123,9 +121,9 @@ contract IndexVaultSlipstreamForkTest is Test {
 
     function test_router_and_measured_pools_correspond() public view {
         assertEq(address(adapter.router()), ROUTER);
-        assertEq(adapter.listedTokens().length, 12);
+        assertEq(adapter.listedTokens().length, 10);
         assertEq(ISlipstreamRouter(ROUTER).factory(), CL_FACTORY);
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < 10; ++i) {
             assertEq(IClFactory(CL_FACTORY).getPool(USDC, toks[i], TS), vm.parseAddress(POOL[i]), "pool differs from evidence");
         }
     }
@@ -159,19 +157,19 @@ contract IndexVaultSlipstreamForkTest is Test {
         assertGe(IERC20(USDC).balanceOf(address(vault)), 800e6 * 99 / 100);
     }
 
-    /// Worst case of the per-leg balance reads: 20 components and 20 legs (12 real pools, then 8 repeated buys).
+    /// Worst case of the per-leg balance reads: 20 components and 20 legs (10 real pools, then 10 padding components).
     function test_gas_20_components_20_legs() public {
         address[] memory t = new address[](20);
         uint256[] memory caps = new uint256[](20);
         IIndexVault.Component[] memory c = new IIndexVault.Component[](20);
-        address[] memory pools = new address[](12);
-        address[] memory real = new address[](12);
+        address[] memory pools = new address[](10);
+        address[] memory real = new address[](10);
         for (uint256 i; i < 20; ++i) {
-            t[i] = i < 12 ? toks[i] : address(new MockToken("PAD", 8));
+            t[i] = i < 10 ? toks[i] : address(new MockToken("PAD", 8));
             caps[i] = 50_000e6;
             c[i] = IIndexVault.Component(t[i], 500);
-            oracle.fresh(t[i], i < 12 ? int256(_spotPrice8(vm.parseAddress(POOL[i]))) : int256(100e8));
-            if (i < 12) {
+            oracle.fresh(t[i], i < 10 ? int256(_spotPrice8(vm.parseAddress(POOL[i]))) : int256(100e8));
+            if (i < 10) {
                 pools[i] = vm.parseAddress(POOL[i]);
                 real[i] = toks[i];
             }
@@ -186,7 +184,7 @@ contract IndexVaultSlipstreamForkTest is Test {
         (bool ok,) = USDC.call(abi.encodeWithSignature("approve(address,uint256)", address(v), type(uint256).max));
         assertTrue(ok);
         bytes[] memory legs = new bytes[](20);
-        for (uint256 i; i < 20; ++i) legs[i] = abi.encodeCall(SlipstreamAdapter.buy, (toks[i % 12], 800e6, 0));
+        for (uint256 i; i < 20; ++i) legs[i] = abi.encodeCall(SlipstreamAdapter.buy, (toks[i % 10], 800e6, 0));
         uint256 g = gasleft();
         v.deposit(16_000e6, legs);
         g -= gasleft();
@@ -195,49 +193,49 @@ contract IndexVaultSlipstreamForkTest is Test {
     }
 
     function test_basket_buy_through_real_router_hits_the_measured_pools() public {
-        bytes[] memory legs = new bytes[](12);
-        uint256[] memory poolBefore = new uint256[](12);
-        for (uint256 i; i < 12; ++i) {
+        bytes[] memory legs = new bytes[](10);
+        uint256[] memory poolBefore = new uint256[](10);
+        for (uint256 i; i < 10; ++i) {
             legs[i] = _leg(toks[i], 800e6);
             poolBefore[i] = IERC20(USDC).balanceOf(vm.parseAddress(POOL[i]));
         }
         uint256 g = gasleft();
         vm.prank(user);
-        vault.deposit(9_600e6, legs);
+        vault.deposit(8_000e6, legs);
         g -= gasleft();
-        console.log("gas, deposit with 12 legs / 12 components:", g);
+        console.log("gas, deposit with 10 legs / 10 components:", g);
 
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < 10; ++i) {
             // the USDC went into the pool from the evidence (net of the pool fee going to LPs/gauge, still >= 99%)
             assertGe(IERC20(USDC).balanceOf(vm.parseAddress(POOL[i])) - poolBefore[i], 790e6, "leg did not hit the measured pool");
             assertGt(IERC20(toks[i]).balanceOf(address(vault)), 0);
         }
         (uint256 v,) = vault.totalValue();
-        console.log("value after buying with 9600 USDC:", v);
-        assertGe(v, 9_600e6 * 99 / 100);
+        console.log("value after buying with 8000 USDC:", v);
+        assertGe(v, 8_000e6 * 99 / 100);
     }
 
-    function test_thin_pool_leg_over_its_cap_is_refused_on_the_real_router() public {
+    function test_leg_over_the_lowest_cap_is_refused_on_the_real_router() public {
         bytes[] memory legs = new bytes[](1);
-        legs[0] = _leg(toks[10], 6_000e6); // INTC cap is 5,000
+        legs[0] = _leg(toks[9], 8_000e6); // TSLA, the lowest cap (7,500)
         vm.prank(user);
         vm.expectPartialRevert(IIndexVault.ImpactCapExceeded.selector);
-        vault.deposit(6_000e6, legs);
+        vault.deposit(8_000e6, legs);
     }
 
-    /// Same 12 swaps sent straight to the router from a plain account: the baseline against which the vault's
+    /// Same 10 swaps sent straight to the router from a plain account: the baseline against which the vault's
     /// per-leg balance reads and approvals are an overhead.
     function test_gas_baseline_same_swaps_without_the_vault() public {
-        deal(USDC, address(this), 9_600e6);
+        deal(USDC, address(this), 8_000e6);
         (bool ok,) = USDC.call(abi.encodeWithSignature("approve(address,uint256)", ROUTER, type(uint256).max));
         assertTrue(ok);
         uint256 g = gasleft();
-        for (uint256 i; i < 12; ++i) {
+        for (uint256 i; i < 10; ++i) {
             ISlipstreamRouter(ROUTER).exactInputSingle(
                 ISlipstreamRouter.ExactInputSingleParams(USDC, toks[i], TS, address(this), block.timestamp, 800e6, 0, 0)
             );
         }
         g -= gasleft();
-        console.log("gas, the same 12 swaps without the vault:", g);
+        console.log("gas, the same 10 swaps without the vault:", g);
     }
 }

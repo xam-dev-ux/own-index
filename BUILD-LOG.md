@@ -27,7 +27,7 @@ I first estimated price impact from `slot0()` and `liquidity()` alone. Checked a
 The per-token size cap first compared the net change in a token's balance. A batch that buys and sells the same token in one transaction nets to almost nothing and passes. The check now uses gross movement per leg, summed in value at oracle prices.
 
 ### 7. I cannot read what the router will do
-A vault cannot verify arbitrary router calldata. The fix was structural: a small adapter that is the vault's only counterparty, over exactly the twelve pools I measured, with the pool-to-token correspondence checked in its constructor. The cap evidence then describes the pools the vault can actually reach, not just the pools I happened to look at.
+A vault cannot verify arbitrary router calldata. The fix was structural: a small adapter that is the vault's only counterparty, over exactly the ten pools I measured, with the pool-to-token correspondence checked in its constructor. The cap evidence then describes the pools the vault can actually reach, not just the pools I happened to look at.
 
 ### 8. I reasoned the wrong way about an unknown unit
 B20 tokens expose `effectiveAt()` for a scheduled multiplier change. All 298 listed tokens return 0, so there is no live sample and I could not confirm its unit. I wrote that if the unit were milliseconds the vault would just refuse more, which is safe. That was backwards. `effectiveAt` is an instant, so a millisecond value looks like a date thousands of years away, the "imminent" check never fires, and the vault trades through a multiplier change. The failure is unsafe. The guarantee is now a unit-independent value check: if `uiMultiplier()` differs from the last observed value, or changed less than the settle window ago, the vault refuses. A plausibility rule on `effectiveAt` stays as an early warning only. A background watcher alarms the first time any token's `effectiveAt` becomes nonzero, so the unit can finally be read from a live sample.
@@ -39,26 +39,32 @@ At the end of a deployment script, reading state reads the simulation, not the c
 Closures are append-only. The oracle has no function to remove or shorten one. I had said a wide closure could be narrowed later; it cannot. And a half day left undeclared is not safely refused: a print from the early close still counts as fresh until the token's silence threshold runs out. So the closures are declared wide, the whole of 26 and 27 November, and that decision is final at deploy. The cost is availability on two days, never safety.
 
 ### 11. The Saturday block flattered the pools
-My caps came from a sweep at a Saturday block. I re-ran it at two Friday session blocks and the picture changed. MSFT, NVDA, SNDK, SPCX and TSLA could move price by more than the 50 bps the cap was meant to bound. INTC cost 94 to 105 bps at $500, and CRCL's pool held in-range liquidity of 571,692 units, so 800 USDC bought 0.0066 CRCL, about 45 cents. At a third block, an hour before the window closed, both were usable again. So what the data shows is that pool depth varies a lot between blocks and that one block of any day is not a distribution. I did not find the cause. The cap table is being rebuilt as the minimum over several session blocks, and INTC and CRCL leave the index if they stay unusable. That is decided after the Monday measurement.
+My caps came from a sweep at a Saturday block. I re-ran it at two Friday session blocks and the picture changed. MSFT, NVDA, SNDK, SPCX and TSLA could move price by more than the 50 bps the cap was meant to bound. INTC cost 94 to 105 bps at $500, and CRCL's pool held in-range liquidity of 571,692 units, so 800 USDC bought 0.0066 CRCL, about 45 cents. At a third block, an hour before the window closed, both were usable again. So what the data shows is that pool depth varies a lot between blocks and that one block of any day is not a distribution. I did not find the cause. The cap table was rebuilt as the minimum over the session blocks, and INTC and CRCL left the index (items 13 and 14).
 
 ### 12. The interface showed me bugs the contract tests could not
 Driving the interface against a mainnet fork found two. A deposit whose simulation passed ran out of gas when sent, because the gas estimate is too tight for eleven nested swaps; sends now carry 30% headroom. And the rebalance panel proposed nine trades of $1 to $19 when no weight had drifted past the threshold, which invites an action the vault would refuse. It now proposes trades only past the threshold.
 
+### 13. Thresholds: the data could not support the number I wanted
+I planned a per-token silence threshold from a high percentile of the gaps between prints. When the pollers ended, the data did not hold that: they covered 6 of the 12 tokens, one weekend and one Monday, and AAPL printed 5 times in the whole period. A percentile over that looks rigorous and is not. What the data does give is one hard observation: AAPL stayed silent for 13.5 hours with the market open (Monday 01:00 to 14:30 UTC). So the threshold is a single conservative bound, 14 hours of open time for all ten tokens, anchored on that observation and backed by the 24-hour heartbeat as the hard limit. It is not a measured percentile and I do not present it as one. The recorder can change it with `setThreshold` once weeks of data across several market regimes exist, without touching the gap ledger. A feed that updates on deviation and goes quiet is also telling you the price moved less than 0.5%, so silence is information, not only absence of it.
+
+### 14. Twelve tokens became ten
+A live Monday-session sweep (18:04 UTC) showed INTC and CRCL usable: 37 bps and 14.7 bps at 500 USDC. At two Friday session blocks the same pools cost 94 to 105 bps and almost nothing respectively. The rule fixed beforehand is the minimum over session blocks, so both leave the index; a good block does not say anything about the worst case. The caps that remain: MSFT 20,000, NVDA, SNDK and SPCX 30,000, TSLA 7,500, the other five at the sweep ceiling of 50,000, which is where measurement stopped. With ten tokens the development vault deposits 8,000 USDC through the real pools with no slippage refusal, which the twelve-token vault could not.
+
 ## Limits I know about
 - **Caps are an upper bound for a pool state, not a promise.** Depth moved between blocks. The sweep is a single block per sample, buy direction only, and ignores the dynamic fee and the MEV-tax module on these pools.
 - **The unit of `effectiveAt` is assumed, not observed.** Seconds is what the documentation says. It is mitigated by the value check but not verified live.
+- **The silence threshold is a bound, not a percentile** (item 13), and the comparison window, heartbeat margin and multiplier window are chosen values, not fitted ones. They are marked as such in `deploy/mainnet.params.env`.
 - **The size cap is only as good as its sample.** Several tokens sit at the sweep ceiling of $50,000, which is where measurement stopped, not a limit I measured.
 - **The weekend gap ledger needs a real weekend.** A fork produces no new prints, so the ledger is empty until mainnet has a reopen.
 - **Two divergence states have only been tested with mocks.** `COMPARED` and `PRINTS_TOO_FAR_APART` wait on a fixture from real prints.
 - **Slippage is checked on the whole batch, not per swap.** A bad single leg inside a good batch can hide under the batch tolerance.
-- **The Base block gas limit was not checked.** A 12-leg batch measured 6.16 million gas on the fork, and I make no claim about headroom.
+- **The Base block gas limit was not checked.** A 10-leg batch measured 4.86 million gas on the fork, and I make no claim about headroom.
 - **The contracts are not audited.**
 
 ## What the fork now proves
 A local fork of Base is pinned at a session block, with the whole system deployed. The real oracle classifies every state on screen, not just text I wrote: fresh, closed on a weekend, paused (through a mock registry that replaces the real one on the fork), feed not updating after three hours, and awaiting first print after a Monday reopen. A deposit, a refused rebalance recorded on chain, and a withdrawal with the market closed all run through the interface.
 
 ## Still to do
-- Mainnet parameters from the pollers, which finish 2026-11-09 16:00 UTC: window offsets, per-token silence thresholds, comparison window, settle window.
-- The in-session impact sweep, new caps, and the decision on the twelve-to-ten token cut.
-- The real-print fixture for the divergence states.
+- The close-of-week offset is inferred (Friday 20:00 ET), not measured; the open offset was measured once, in winter time.
+- The real-print fixture for the divergence states, from the Monday prints now in `data/`.
 - Deploy, on-chain verification, and the first week of public data.

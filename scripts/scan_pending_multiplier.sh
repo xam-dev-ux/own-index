@@ -2,7 +2,7 @@
 # Alarm for the unverified unit of B20 effectiveAt(). Every value has been 0 so far (no change scheduled on any of
 # the 298 listed tokens at block 54457318). The first nonzero value is the first live sample of the unit:
 # record it in docs/vault-design.md. Exit status 1 when any token has a pending change, so it can sit in a cron.
-# Usage: scripts/scan_pending_multiplier.sh [rpc-url]   (the 12 tokens a vault may hold)
+# Usage: scripts/scan_pending_multiplier.sh [rpc-url]   (the 10 tokens a vault may hold)
 set -u
 RPC="${1:-https://mainnet.base.org}"
 TOKENS="
@@ -16,8 +16,6 @@ NVDA:0xb20000000000000000000078ee7ce2fE4908108C
 SNDK:0xb200000000000000000000397293Cb8cda9a10c5
 SPCX:0xb2000000000000000000007b9fcbd005511aCBd5
 TSLA:0xb2000000000000000000001e800a7f5189430cD0
-INTC:0xB2000000000000000000004AFF16039bA04bdFBc
-CRCL:0xB20000000000000000000019f6E7C675b73C2e4D
 "
 found=0
 for row in $TOKENS; do
@@ -31,5 +29,5 @@ for row in $TOKENS; do
     found=1
   fi
 done
-[ "$found" = 0 ] && echo "no pending multiplier change on the 12 tokens"
+[ "$found" = 0 ] && echo "no pending multiplier change on the 10 tokens"
 exit $found
