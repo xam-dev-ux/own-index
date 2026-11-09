@@ -44,7 +44,7 @@ Caps are immutable and set in the factory: MSFT 20,000 USDC, NVDA, SNDK and SPCX
 - The unit of `effectiveAt()` is assumed (seconds) and not observed on a live token. Safety does not depend on it: a vault refuses if `uiMultiplier()` changed.
 - Slippage is checked on the batch, not per swap. Sell-direction impact, the dynamic fee and the MEV-tax module were not measured. The Base block gas limit was not checked against the worst case.
 - The gap ledger only fills with real weekends. TO FILL: first recorded gap, with transaction.
-- Onchain activity so far: TO FILL after the demo vault and the first `snapshotAll` calls.
+- Onchain activity so far: one vault created through the web app, [0xecc1692c68917127f9c1f7a207a4038871161cc0](https://basescan.org/address/0xecc1692c68917127f9c1f7a207a4038871161cc0), by wallet 0x85e7FC9c7E3834d9bE8d60d1e3718a24d1F96678, in transaction [0xceb12e2e…171d7e](https://basescan.org/tx/0xceb12e2e6c8b029d2b77160c72a6d04c5e1925c86934f16f328332f360171d7e) (block 55292580, 2026-11-09). That wallet is the author's own, not an independent user. The call carries the ERC-8021 Builder Code suffix. TO FILL: the deposit into it and the first `snapshotAll` calls.
 
 ## Prior work
 `src/BaseTimeLib.sol`, its mock and its tests come from BaseTimeKit and are **code that existed before the Quest Period**. They give the millisecond clock of the BaseTime predeploy. Everything else in the repository was written during the Quest Period.
