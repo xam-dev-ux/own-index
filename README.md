@@ -5,7 +5,7 @@ Two contracts for tokenized stocks on Base.
 - **WeekendMark** (`SessionOracle`) turns a Chainlink equity feed into a *verdict*: is this price usable right now, and if not, why? It tells a closed market (a weekend, a holiday, an early close) apart from a feed that has gone quiet while it should be updating. It also keeps a public ledger of how far each price moved across every closure.
 - **Own Index** is a factory of self-custodial index vaults. You choose the components and weights. The vault refuses to trade against any price that is not fresh, and says exactly why.
 
-Status: the contracts and the web app are built and tested, on ten tokenized equities (AAPL, AMZN, GOOGL, META, MSFT, MSTR, NVDA, SNDK, SPCX, TSLA). **Deployed on Base mainnet on 2026-11-09**, and `make verify-mainnet` read the chain and matched every check. See [BUILD-LOG.md](BUILD-LOG.md) for what the design had to react to and what is still pending.
+Status: the contracts and the web app are built and tested, on ten tokenized equities (AAPL, AMZN, GOOGL, META, MSFT, MSTR, NVDA, SNDK, SPCX, TSLA). **Deployed on Base mainnet on 2026-11-09**, source verified on BaseScan, and `make verify-mainnet` read the chain and matched every check. The submission summary is in [SUBMISSION.md](SUBMISSION.md). See [BUILD-LOG.md](BUILD-LOG.md) for what the design had to react to and what is still pending.
 
 | Contract | Base mainnet |
 |---|---|
