@@ -2,6 +2,8 @@
 
 Base Builder Quest, Stocks Maxxing Season, Programmable Stock Markets track.
 Repository: https://github.com/xam-dev-ux/own-index
+Live app: https://web-54ux.vercel.app
+Agent skill: [skills/own-index](skills/own-index/SKILL.md)
 
 ## What this is
 Two contracts for tokenized stocks on Base.

@@ -1,0 +1,21 @@
+{
+  "schemaVersion": 1,
+  "slug": "own-index",
+  "provider": "Own Index",
+  "providerUrl": "https://web-54ux.vercel.app",
+  "demo": {
+    "title": "own-index.txt",
+    "language": "text",
+    "code": "You: Is the NVDA price usable right now?\nAgent: (reads the verdict from the WeekendMark oracle on Base: market closed for the weekend, last print and its age, not an outage)\nYou: What does my vault refuse to do while it is closed?\nAgent: (reads rebalanceStatus() and explains each refusal reason in plain language)"
+  },
+  "setup": [
+    "Install the own-index skill (command below)",
+    "Ask: Is the NVDA price usable right now?",
+    "Read oracle verdicts and vault state by conversation; owner actions go through the Own Index web app"
+  ],
+  "install": {
+    "type": "bankr",
+    "repoPath": "own-index",
+    "command": "install the own-index skill from https://github.com/BankrBot/skills/tree/main/own-index"
+  }
+}
