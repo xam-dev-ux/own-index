@@ -45,14 +45,30 @@ Caps are immutable and set in the factory: MSFT 20,000 USDC, NVDA, SNDK and SPCX
 - The weekly-window close offset is inferred, not measured; the recorder can correct it with `setWindow`, proven on a fork.
 - The unit of `effectiveAt()` is assumed (seconds) and not observed on a live token. Safety does not depend on it: a vault refuses if `uiMultiplier()` changed.
 - Slippage is checked on the batch, not per swap. Sell-direction impact, the dynamic fee and the MEV-tax module were not measured. The Base block gas limit was not checked against the worst case.
-- The gap ledger only fills with real weekends. TO FILL: first recorded gap, with transaction.
-- Onchain activity so far: one vault created through the web app, [0xecc1692c68917127f9c1f7a207a4038871161cc0](https://basescan.org/address/0xecc1692c68917127f9c1f7a207a4038871161cc0), by wallet 0x85e7FC9c7E3834d9bE8d60d1e3718a24d1F96678, in transaction [0xceb12e2e…171d7e](https://basescan.org/tx/0xceb12e2e6c8b029d2b77160c72a6d04c5e1925c86934f16f328332f360171d7e) (block 55292580, 2026-11-09). That wallet is the author's own, not an independent user. The call carries the ERC-8021 Builder Code suffix. The first successful deposit into it: 0.01 USDC for AAPL through the adapter and the real Slipstream pool, transaction [0x698db910…bf07](https://basescan.org/tx/0x698db910f77e78ebcbdd95e196be185d56124ea361ea3f48e2af500e1db6bf07) (block 55752870, gas limit set by hand to 1,300,000, 573,876 used). Three earlier attempts reverted, and the cause is in BUILD-LOG item 19. First `snapshotAll`, called by the deployer while all tokens read CLOSED (Saturday 2026-11-14, block 57277937): [0xdba07c31…ae2f](https://basescan.org/tx/0xdba07c317a11412d06acaffac463d8105de2373446d48ed839204ee34ddaae2f) recorded the close print of all ten tokens. Second `snapshotAll` after the Monday reopen (2026-11-16, block 58093048): [0xa6608194…57b7](https://basescan.org/tx/0xa660819438e4bf6410c47c44e399eda4489e28fc4efaa9e9a4d4b9f0c1e457b7) wrote the first ten gap records of the ledger, each from the last Friday print to the first Monday print (about 52 to 62 hours apart): AAPL +0.60%, AMZN -0.38%, GOOGL -1.04%, META -0.73%, MSFT 0.00%, MSTR -6.04%, NVDA -0.16%, SNDK -3.19%, SPCX +1.98%, TSLA -0.71%.
+- The gap ledger only fills with real weekends. It has one so far: ten records from the weekend of 2026-11-14 to 2026-11-16 (below). One weekend is a sample of one.
+- Onchain activity is listed in the next section. All of it comes from the author's own wallets; none of it is independent usage.
+
+## Onchain activity (Base mainnet)
+| When (UTC) | What | Transaction |
+|---|---|---|
+| 2026-11-09 | Vault created through the web app, [0xecc1…1cc0](https://basescan.org/address/0xecc1692c68917127f9c1f7a207a4038871161cc0), by wallet 0x85e7…8678, with the Builder Code suffix | [0xceb12e2e…171d7e](https://basescan.org/tx/0xceb12e2e6c8b029d2b77160c72a6d04c5e1925c86934f16f328332f360171d7e) |
+| 2026-11-10 | First deposit: 0.01 USDC into AAPL through the adapter and the real Slipstream pool | [0x698db910…bf07](https://basescan.org/tx/0x698db910f77e78ebcbdd95e196be185d56124ea361ea3f48e2af500e1db6bf07) |
+| 2026-11-14 | `snapshotAll` while all ten tokens read CLOSED: close print of each recorded | [0xdba07c31…ae2f](https://basescan.org/tx/0xdba07c317a11412d06acaffac463d8105de2373446d48ed839204ee34ddaae2f) |
+| 2026-11-16 | `snapshotAll` after the reopen: first ten gap records written | [0xa6608194…57b7](https://basescan.org/tx/0xa660819438e4bf6410c47c44e399eda4489e28fc4efaa9e9a4d4b9f0c1e457b7) |
+
+Four earlier deposit attempts reverted before the one above succeeded. The wallet sent a lower gas limit than the app asked for, and a pool hook reverts when gas is tight (BUILD-LOG item 19). The deposit that worked had its gas limit set by hand to 1,300,000.
+
+First gap records, last Friday print to first Monday print (about 52 to 62 hours apart):
+
+| MSTR | SNDK | SPCX | GOOGL | META | TSLA | AAPL | AMZN | NVDA | MSFT |
+|---:|---:|---:|---:|---:|---:|---:|---:|---:|---:|
+| -6.04% | -3.19% | +1.98% | -1.04% | -0.73% | -0.71% | +0.60% | -0.38% | -0.16% | 0.00% |
 
 ## Prior work
 `src/BaseTimeLib.sol`, its mock and its tests come from BaseTimeKit and are **code that existed before the Quest Period**. They give the millisecond clock of the BaseTime predeploy. Everything else in the repository was written during the Quest Period.
 
 ## Build in public
-TO FILL: links to posts. BUILD-LOG.md is the written account of what the design reacted to, including where I was wrong.
+BUILD-LOG.md is the written account of what the design reacted to, including where I was wrong. Thread on X: LINK_TO_THREAD.
 
 ## Eligibility
 Own Index is software. The web app asks each visitor to attest that they are allowed to hold tokenized equities where they live. There is no geographic block, and no restricted jurisdiction has been identified for this project.
